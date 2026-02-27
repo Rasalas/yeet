@@ -20,6 +20,11 @@ type Git interface {
 	LogOneline() (string, error)
 	StatusShort() (string, error)
 	CurrentBranch() (string, error)
+	DefaultBranch() (string, error)
+	LogRange(base string) (string, error)
+	DiffRange(base string) (string, error)
+	DiffStatRange(base string) (string, error)
+	HasUpstream() bool
 }
 
 // Default is the package-level Git implementation used by free functions.
@@ -91,7 +96,7 @@ func (ExecGit) PushSetUpstream() (string, error) {
 }
 
 // DefaultBranch detects the default branch (main/master) of the repository.
-func DefaultBranch() (string, error) {
+func (ExecGit) DefaultBranch() (string, error) {
 	// Try symbolic-ref first (works when origin/HEAD is set)
 	if out, err := run("symbolic-ref", "refs/remotes/origin/HEAD"); err == nil {
 		parts := strings.SplitN(out, "/", 4)
@@ -111,22 +116,22 @@ func DefaultBranch() (string, error) {
 }
 
 // LogRange returns one-line log entries between base and HEAD.
-func LogRange(base string) (string, error) {
+func (ExecGit) LogRange(base string) (string, error) {
 	return run("log", "--oneline", base+"..HEAD")
 }
 
 // DiffRange returns the diff between the merge-base of base and HEAD.
-func DiffRange(base string) (string, error) {
+func (ExecGit) DiffRange(base string) (string, error) {
 	return run("diff", base+"...HEAD")
 }
 
 // DiffStatRange returns the diff stat between the merge-base of base and HEAD.
-func DiffStatRange(base string) (string, error) {
+func (ExecGit) DiffStatRange(base string) (string, error) {
 	return run("diff", "--stat", base+"...HEAD")
 }
 
 // HasUpstream checks whether the current branch has a remote tracking branch.
-func HasUpstream() bool {
+func (ExecGit) HasUpstream() bool {
 	err := exec.Command("git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}").Run()
 	return err == nil
 }
@@ -145,3 +150,8 @@ func LogOneline() (string, error)            { return Default.LogOneline() }
 func HasStagedChanges() bool                 { return Default.HasStagedChanges() }
 func StatusShort() (string, error)           { return Default.StatusShort() }
 func CurrentBranch() (string, error)         { return Default.CurrentBranch() }
+func DefaultBranch() (string, error)         { return Default.DefaultBranch() }
+func LogRange(base string) (string, error)   { return Default.LogRange(base) }
+func DiffRange(base string) (string, error)  { return Default.DiffRange(base) }
+func DiffStatRange(base string) (string, error) { return Default.DiffStatRange(base) }
+func HasUpstream() bool                      { return Default.HasUpstream() }
