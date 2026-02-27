@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/rasalas/yeet/internal/xdg"
 	gokeyring "github.com/zalando/go-keyring"
 )
 
@@ -112,11 +113,11 @@ type openCodeAuth struct {
 }
 
 func openCodeAuthPath() string {
-	home, err := os.UserHomeDir()
+	dir, err := xdg.DataDir()
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(home, ".local", "share", "opencode", "auth.json")
+	return filepath.Join(dir, "opencode", "auth.json")
 }
 
 func loadOpenCodeAuth() map[string]openCodeAuth {

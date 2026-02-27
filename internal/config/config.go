@@ -7,6 +7,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/rasalas/yeet/internal/keyring"
+	"github.com/rasalas/yeet/internal/xdg"
 )
 
 // DefaultOllamaURL is the default Ollama API endpoint.
@@ -56,11 +57,11 @@ func DefaultConfig() Config {
 }
 
 func configPath() (string, error) {
-	home, err := os.UserHomeDir()
+	dir, err := xdg.ConfigDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".config", "yeet", "config.toml"), nil
+	return filepath.Join(dir, "config.toml"), nil
 }
 
 // Path returns the config file path, creating the file with defaults if it doesn't exist.

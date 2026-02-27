@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/rasalas/yeet/internal/xdg"
 )
 
 // DefaultPrompt is the built-in system prompt for commit message generation.
@@ -37,11 +39,11 @@ const maxDiffLines = 8000
 
 // PromptPath returns the path to the user's prompt file.
 func PromptPath() (string, error) {
-	home, err := os.UserHomeDir()
+	dir, err := xdg.ConfigDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".config", "yeet", "prompt.txt"), nil
+	return filepath.Join(dir, "prompt.txt"), nil
 }
 
 // LoadPrompt reads the prompt from ~/.config/yeet/prompt.txt.

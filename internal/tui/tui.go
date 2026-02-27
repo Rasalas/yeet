@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -198,7 +199,7 @@ func (m *model) fetchModelsCmd() tea.Cmd {
 	provider := m.pickProvider
 	cfg := m.cfg
 	return func() tea.Msg {
-		models, err := ai.FetchModels(provider, cfg)
+		models, err := ai.FetchModels(context.Background(), provider, cfg)
 		return modelsLoadedMsg{models: models, err: err}
 	}
 }

@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -17,24 +18,24 @@ var modelsClient = &http.Client{Timeout: 5 * time.Second}
 
 // FetchModels queries the provider's API for available models.
 // Returns a sorted list of model IDs, or an error if the request fails.
-func FetchModels(provider string, cfg config.Config) ([]string, error) {
+func FetchModels(ctx context.Context, provider string, cfg config.Config) ([]string, error) {
 	switch provider {
 	case "anthropic":
-		return fetchAnthropic(cfg)
+		return fetchAnthropic(ctx, cfg)
 	case "ollama":
-		return fetchOllama(cfg)
+		return fetchOllama(ctx, cfg)
 	default:
-		return fetchOpenAICompatible(provider, cfg)
+		return fetchOpenAICompatible(ctx, provider, cfg)
 	}
 }
 
-func fetchAnthropic(cfg config.Config) ([]string, error) {
+func fetchAnthropic(ctx context.Context, cfg config.Config) ([]string, error) {
 	key, err := keyring.Get("anthropic")
 	if err != nil {
 		return nil, fmt.Errorf("no API key for anthropic")
 	}
 
-	req, err := http.NewRequest("GET", "https://api.anthropic.com/v1/models?limit=100", nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", "https://api.anthropic.com/v1/models?limit=100", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -44,14 +45,14 @@ func fetchAnthropic(cfg config.Config) ([]string, error) {
 	return doOpenAIModelList(req)
 }
 
-func fetchOllama(cfg config.Config) ([]string, error) {
+func fetchOllama(ctx context.Context, cfg config.Config) ([]string, error) {
 	url := cfg.Ollama.URL
 	if url == "" {
 		url = config.DefaultOllamaURL
 	}
 	url = strings.TrimRight(url, "/") + "/api/tags"
 
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -86,7 +87,7 @@ func fetchOllama(cfg config.Config) ([]string, error) {
 	return models, nil
 }
 
-func fetchOpenAICompatible(provider string, cfg config.Config) ([]string, error) {
+func fetchOpenAICompatible(ctx context.Context, provider string, cfg config.Config) ([]string, error) {
 	var apiKey, baseURL string
 
 	switch provider {
@@ -114,7 +115,7 @@ func fetchOpenAICompatible(provider string, cfg config.Config) ([]string, error)
 	}
 
 	url := strings.TrimRight(baseURL, "/") + "/models"
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, err
 	}
