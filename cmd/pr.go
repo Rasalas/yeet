@@ -241,7 +241,7 @@ func displayPRPreview(title, body string) int {
 	}
 
 	if term.MsgBg != "" {
-		pad := strings.Repeat(" ", maxWidth+5)
+		pad := strings.Repeat(" ", maxWidth+4)
 		// Top border
 		fmt.Printf("  %s%s%s\n", term.MsgBar, pad, term.Reset)
 		lines++
@@ -249,11 +249,11 @@ func displayPRPreview(title, body string) int {
 		for i, line := range content {
 			rpad := strings.Repeat(" ", maxWidth-len([]rune(line)))
 			if i == 0 {
-				// Title: bold with extra padding
-				fmt.Printf("  %s  %s%s%s\n", term.MsgOpen, line, rpad, term.MsgClose)
+				// Title: bold (MsgOpen already has 1 space, MsgClose has 2 trailing spaces)
+				fmt.Printf("  %s%s%s%s\n", term.MsgOpen, line, rpad, term.MsgClose)
 			} else {
-				// Body: dim on card bg with extra padding
-				fmt.Printf("  %s%s  %s%s %s\n", term.MsgBar, term.Dim, line, rpad, term.Reset)
+				// Body: dim on card bg, 2 spaces left + 2 spaces right
+				fmt.Printf("  %s%s  %s%s  %s\n", term.MsgBar, term.Dim, line, rpad, term.Reset)
 			}
 			lines++
 		}
