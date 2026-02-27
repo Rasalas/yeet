@@ -5,7 +5,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/rasalas/yeet/internal/ai"
 	"github.com/rasalas/yeet/internal/config"
@@ -15,6 +18,32 @@ import (
 	"golang.org/x/term"
 )
 
+// ANSI color codes — disabled when NO_COLOR is set.
+var (
+	bold   = "\033[1m"
+	dim    = "\033[2m"
+	red    = "\033[31m"
+	green  = "\033[32m"
+	purple = "\033[35m"
+	reset  = "\033[0m"
+)
+
+func init() {
+	if os.Getenv("NO_COLOR") != "" {
+		bold = ""
+		dim = ""
+		red = ""
+		green = ""
+		purple = ""
+		reset = ""
+	}
+
+	rootCmd.Flags().StringVarP(&messageFlag, "message", "m", "", "Commit message (use when message collides with a subcommand name)")
+}
+
+// diffStatRe matches lines like "  file.go | 29 ++---"
+var diffStatRe = regexp.MustCompile(`^(.*\|[^+-]*?)(\+*)(-*)$`)
+
 var messageFlag string
 
 var rootCmd = &cobra.Command{
@@ -22,10 +51,6 @@ var rootCmd = &cobra.Command{
 	Short: "Git commit & push in one command",
 	Long:  "Stage all changes, generate or use a commit message, and push — all in one step.",
 	RunE:  runYeet,
-}
-
-func init() {
-	rootCmd.Flags().StringVarP(&messageFlag, "message", "m", "", "Commit message (use when message collides with a subcommand name)")
 }
 
 func Execute() {
@@ -62,28 +87,35 @@ func runYeet(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Println()
 	for _, line := range strings.Split(stat, "\n") {
-		fmt.Println("  " + line)
+		fmt.Println("  " + colorizeDiffStat(line))
 	}
 	fmt.Println()
 
 	// 3. Get commit message
 	var message string
 	var usage *ai.Usage
+	streamed := false
 	if messageFlag != "" {
 		message = messageFlag
 	} else if len(args) > 0 {
 		message = strings.Join(args, " ")
 	} else {
-		message, usage, err = generateOrFallback()
+		message, usage, streamed, err = generateOrFallback()
 		if err != nil {
 			return err
 		}
 	}
 
 	// 4. Confirm loop (show message, allow edit)
+	showMessage := !streamed // skip first display if already streamed
 	for {
-		fmt.Printf("  > %s\n\n", message)
-		fmt.Println("  Enter commit  ·  e edit  ·  E $EDITOR  ·  Esc cancel")
+		if showMessage {
+			fmt.Printf("  %s%s> %s%s\n\n", bold, purple, message, reset)
+		} else {
+			fmt.Println()
+			showMessage = true // always show on subsequent iterations (after edit)
+		}
+		fmt.Printf("  %sEnter commit  ·  e edit  ·  E $EDITOR  ·  Esc cancel%s\n", dim, reset)
 
 		action, err := waitForAction()
 		if err != nil {
@@ -144,20 +176,20 @@ func runYeet(cmd *cobra.Command, args []string) error {
 	}
 
 	branch, _ := git.CurrentBranch()
-	fmt.Printf("  Pushed to origin/%s.\n", branch)
+	fmt.Printf("  %sPushed to origin/%s.%s\n", green, branch, reset)
 
 	if usage != nil && usage.InputTokens > 0 {
-		costLine := fmt.Sprintf("  %s · %s", usage.FormatTokens(), usage.Model)
+		costLine := fmt.Sprintf("%s · %s", usage.FormatTokens(), usage.Model)
 		if cost, ok := usage.Cost(); ok {
-			costLine = fmt.Sprintf("  %s · %s · %s", cost, usage.FormatTokens(), usage.Model)
+			costLine = fmt.Sprintf("%s · %s · %s", cost, usage.FormatTokens(), usage.Model)
 		}
-		fmt.Println(costLine)
+		fmt.Printf("  %s%s%s\n", dim, costLine, reset)
 	}
 
 	return nil
 }
 
-func generateOrFallback() (string, *ai.Usage, error) {
+func generateOrFallback() (string, *ai.Usage, bool, error) {
 	cfg, err := config.Load()
 	if err != nil {
 		cfg = config.DefaultConfig()
@@ -172,7 +204,7 @@ func generateOrFallback() (string, *ai.Usage, error) {
 
 		yes, err := waitForYesNo()
 		if err != nil {
-			return "", nil, err
+			return "", nil, false, err
 		}
 
 		if yes {
@@ -189,24 +221,21 @@ func generateOrFallback() (string, *ai.Usage, error) {
 			fmt.Println("  Enter commit message:")
 			msg, err := editLine("")
 			if err != nil {
-				return "", nil, err
+				return "", nil, false, err
 			}
 			fmt.Println()
 			if msg == "" {
-				return "", nil, fmt.Errorf("empty commit message")
+				return "", nil, false, fmt.Errorf("empty commit message")
 			}
 			fmt.Printf("\n  tip: run `yeet auth set %s` to enable AI commit messages\n\n", cfg.Provider)
-			return msg, nil, nil
+			return msg, nil, false, nil
 		}
 	}
 
-	// AI generation
-	fmt.Print("  Generating commit message...")
-
+	// AI generation — collect git context
 	diff, err := git.DiffCached()
 	if err != nil {
-		fmt.Println(" failed")
-		return "", nil, fmt.Errorf("failed to get diff: %w", err)
+		return "", nil, false, fmt.Errorf("failed to get diff: %w", err)
 	}
 
 	branch, _ := git.CurrentBranch()
@@ -220,25 +249,104 @@ func generateOrFallback() (string, *ai.Usage, error) {
 		Status:        status,
 	}
 
+	// Try streaming if supported, otherwise fall back to non-streaming
+	if sp, ok := provider.(ai.StreamingProvider); ok {
+		message, usage, err := generateStreaming(sp, ctx)
+		if err != nil {
+			fmt.Print("\r\033[K")
+			fmt.Printf("  %s%v%s\n\n", red, err, reset)
+			fmt.Println("  Enter commit message manually:")
+			msg, editErr := editLine("")
+			if editErr != nil {
+				return "", nil, false, editErr
+			}
+			fmt.Println()
+			if msg == "" {
+				return "", nil, false, fmt.Errorf("empty commit message")
+			}
+			return msg, nil, false, nil
+		}
+		return message, &usage, true, nil
+	}
+
+	// Non-streaming fallback
+	fmt.Printf("  %sGenerating commit message...%s", dim, reset)
 	message, usage, err := provider.GenerateCommitMessage(ctx)
 	if err != nil {
-		// AI failed at runtime — fall back to manual
 		fmt.Println(" failed")
-		fmt.Printf("  %v\n\n", err)
+		fmt.Printf("  %s%v%s\n\n", red, err, reset)
 		fmt.Println("  Enter commit message manually:")
 		msg, editErr := editLine("")
 		if editErr != nil {
-			return "", nil, editErr
+			return "", nil, false, editErr
 		}
 		fmt.Println()
 		if msg == "" {
-			return "", nil, fmt.Errorf("empty commit message")
+			return "", nil, false, fmt.Errorf("empty commit message")
 		}
-		return msg, nil, nil
+		return msg, nil, false, nil
 	}
 
 	fmt.Print("\r\033[K") // clear the "Generating..." line
-	return message, &usage, nil
+	return message, &usage, false, nil
+}
+
+var spinnerFrames = []rune{'⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'}
+
+func generateStreaming(sp ai.StreamingProvider, ctx ai.CommitContext) (string, ai.Usage, error) {
+	// Start spinner
+	var mu sync.Mutex
+	firstToken := false
+	spinnerDone := make(chan struct{})
+
+	go func() {
+		i := 0
+		ticker := time.NewTicker(80 * time.Millisecond)
+		defer ticker.Stop()
+		// Show initial spinner frame immediately
+		mu.Lock()
+		if !firstToken {
+			fmt.Printf("\r  %s%c Generating...%s", dim, spinnerFrames[0], reset)
+		}
+		mu.Unlock()
+		for {
+			select {
+			case <-spinnerDone:
+				return
+			case <-ticker.C:
+				mu.Lock()
+				if !firstToken {
+					i = (i + 1) % len(spinnerFrames)
+					fmt.Printf("\r  %s%c Generating...%s", dim, spinnerFrames[i], reset)
+				}
+				mu.Unlock()
+			}
+		}
+	}()
+
+	message, usage, err := sp.GenerateCommitMessageStream(ctx, func(token string) {
+		mu.Lock()
+		defer mu.Unlock()
+		if !firstToken {
+			firstToken = true
+			fmt.Printf("\r\033[K") // clear spinner line
+			fmt.Printf("  %s%s> %s", bold, purple, token)
+		} else {
+			fmt.Print(token)
+		}
+	})
+
+	close(spinnerDone)
+
+	mu.Lock()
+	if firstToken {
+		fmt.Printf("%s\n", reset) // reset color after streamed message
+	} else {
+		fmt.Print("\r\033[K") // clear spinner if no tokens came
+	}
+	mu.Unlock()
+
+	return message, usage, err
 }
 
 func quickSetup(cfg config.Config) error {
@@ -454,6 +562,34 @@ func editExternal(initial string) (string, error) {
 		return initial, nil
 	}
 	return edited, nil
+}
+
+// colorizeDiffStat colorizes a single diff stat line.
+// Lines like "file.go | 29 ++---" get colored +/-.
+// Summary lines like "14 files changed, 895 insertions(+), 594 deletions(-)" get dim.
+func colorizeDiffStat(line string) string {
+	// Summary line (last line of diff stat)
+	if strings.Contains(line, "files changed") || strings.Contains(line, "file changed") {
+		return dim + line + reset
+	}
+
+	// Per-file lines: "file.go | 29 ++---"
+	if m := diffStatRe.FindStringSubmatch(line); m != nil {
+		prefix := m[1] // "file.go | 29 "
+		plus := m[2]   // "+++"
+		minus := m[3]  // "---"
+		var b strings.Builder
+		b.WriteString(prefix)
+		if plus != "" {
+			b.WriteString(green + plus + reset)
+		}
+		if minus != "" {
+			b.WriteString(red + minus + reset)
+		}
+		return b.String()
+	}
+
+	return line
 }
 
 func firstLine(s string) string {
