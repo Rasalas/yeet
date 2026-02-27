@@ -148,5 +148,9 @@ func (p *OllamaProvider) GenerateCommitMessageStream(ctx CommitContext, onToken 
 		}
 	}
 
+	if err := scanner.Err(); err != nil {
+		return "", Usage{}, fmt.Errorf("stream read error: %w", err)
+	}
+
 	return strings.TrimSpace(full.String()), usage, nil
 }

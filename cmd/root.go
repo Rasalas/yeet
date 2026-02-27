@@ -24,13 +24,29 @@ var (
 	dim    = "\033[2m"
 	red    = "\033[31m"
 	green  = "\033[32m"
-	purple = "\033[35m"
 	reset  = "\033[0m"
+
+	// Commit message display: colored left bar on gray background (no gap).
+	// \033[39m resets only foreground, keeping the gray bg active.
+	msgBar   = "\033[35m\033[48;2;40;40;45m▎\033[39m"                 // purple bar on gray bg, then reset fg
+	msgBg    = "\033[48;2;40;40;45m"                                  // gray background only
+	msgOpen  = "\033[35m\033[48;2;40;40;45m▎\033[39m\033[1m "          // bar on gray bg + bold + 1 space (▎ counts as 1 char)
+	msgClose = "  \033[0m"                                            // 2 trailing spaces + full reset
+	msgPad   = 2                                                      // visible trailing chars in msgClose
 )
 
 // keyhint formats a keybinding: key in bold, description in dim.
 func keyhint(key, desc string) string {
 	return reset + bold + key + reset + dim + " " + desc
+}
+
+// clearLines clears n lines going upward from the current cursor position.
+func clearLines(n int) {
+	fmt.Print("\033[2K")
+	for i := 1; i < n; i++ {
+		fmt.Print("\033[1A\033[2K")
+	}
+	fmt.Print("\r")
 }
 
 func init() {
@@ -39,8 +55,12 @@ func init() {
 		dim = ""
 		red = ""
 		green = ""
-		purple = ""
 		reset = ""
+		msgBar = ""
+		msgBg = ""
+		msgOpen = "› "
+		msgClose = ""
+		msgPad = 0
 	}
 
 	rootCmd.Flags().StringVarP(&messageFlag, "message", "m", "", "Commit message (use when message collides with a subcommand name)")
@@ -112,20 +132,37 @@ func runYeet(cmd *cobra.Command, args []string) error {
 	}
 
 	// 4. Confirm loop (show message, allow edit)
-	showMessage := !streamed // skip first display if already streamed
+	showMessage := !streamed
+	linesToClear := 3
+	// Replace single-line streaming output with full block display
+	if streamed && msgBg != "" {
+		fmt.Print("\033[1A\033[2K\r") // clear the streamed line
+		showMessage = true
+	}
 	for {
 		if showMessage {
-			fmt.Printf("  %s%s› %s%s\n\n", bold, purple, message, reset)
+			if msgBg != "" {
+				// 3-line block: top padding, message, bottom padding
+				pad := strings.Repeat(" ", len([]rune(message))+3)
+				fmt.Printf("  %s%s%s\n", msgBar, pad, reset)
+				fmt.Printf("  %s%s%s\n", msgOpen, message, msgClose)
+				fmt.Printf("  %s%s%s\n\n", msgBar, pad, reset)
+				linesToClear = 5 // top + msg + bottom + blank + prompt
+			} else {
+				fmt.Printf("  %s%s%s\n\n", msgOpen, message, msgClose)
+				linesToClear = 3
+			}
 		} else {
 			fmt.Println()
 			showMessage = true // always show on subsequent iterations (after edit)
+			linesToClear = 3
 		}
 		fmt.Printf("  %s%s  ·  %s  ·  %s  ·  %s%s\n",
 			dim,
 			keyhint("enter", "commit"),
 			keyhint("e", "edit"),
 			keyhint("E", "editor"),
-			keyhint("esc", "cancel"),
+			keyhint("q", "cancel"),
 			reset)
 
 		action, err := waitForAction()
@@ -144,24 +181,21 @@ func runYeet(cmd *cobra.Command, args []string) error {
 			fmt.Printf("  %sCancelled.%s\n", dim, reset)
 			return nil
 		case actionEdit:
+			clearLines(linesToClear)
 			edited, err := editLine(message)
 			if err != nil {
 				return err
 			}
 			message = edited
-			// clear prompt area and loop back
-			fmt.Print("\033[2K\033[1A\033[2K\033[1A\033[2K\r")
 			continue
 		case actionEditExternal:
-			fmt.Println()
+			clearLines(linesToClear)
 			edited, err := editExternal(message)
 			if err != nil {
 				fmt.Printf("\n  Editor failed: %v\n", err)
 			} else {
 				message = edited
 			}
-			// clear prompt area and loop back
-			fmt.Print("\033[2K\033[1A\033[2K\033[1A\033[2K\r")
 			continue
 		case actionConfirm:
 			fmt.Println()
@@ -267,7 +301,7 @@ func generateOrFallback() (string, *ai.Usage, bool, error) {
 			fmt.Print("\r\033[K")
 			fmt.Printf("  %s%v%s\n\n", red, err, reset)
 			fmt.Println("  Enter commit message manually:")
-			msg, editErr := editLine("")
+			msg, editErr := editLine(message) // pre-fill with partial message
 			if editErr != nil {
 				return "", nil, false, editErr
 			}
@@ -341,7 +375,7 @@ func generateStreaming(sp ai.StreamingProvider, ctx ai.CommitContext) (string, a
 		if !firstToken {
 			firstToken = true
 			fmt.Printf("\r\033[K") // clear spinner line
-			fmt.Printf("  %s%s› %s", bold, purple, token)
+			fmt.Printf("  %s%s", msgOpen, token)
 		} else {
 			fmt.Print(token)
 		}
@@ -351,7 +385,7 @@ func generateStreaming(sp ai.StreamingProvider, ctx ai.CommitContext) (string, a
 
 	mu.Lock()
 	if firstToken {
-		fmt.Printf("%s\n", reset) // reset color after streamed message
+		fmt.Printf("%s\n", msgClose) // close highlight after streamed message
 	} else {
 		fmt.Print("\r\033[K") // clear spinner if no tokens came
 	}
@@ -435,6 +469,8 @@ func waitForAction() (action, error) {
 				return actionCancel, nil
 			case 3: // Ctrl+C
 				return actionCancel, nil
+			case 'q':
+				return actionCancel, nil
 			case 'e':
 				return actionEdit, nil
 			case 'E':
@@ -457,9 +493,9 @@ func editLine(initial string) (string, error) {
 
 	redraw := func() {
 		fmt.Print("\r\033[2K")
-		fmt.Printf("  › %s", string(line))
-		// move cursor to correct position
-		back := len(line) - cursor
+		fmt.Printf("  %s%s%s", msgOpen, string(line), msgClose)
+		// move cursor to correct position (+msgPad for trailing padding)
+		back := len(line) - cursor + msgPad
 		if back > 0 {
 			fmt.Printf("\033[%dD", back)
 		}

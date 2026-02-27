@@ -37,7 +37,7 @@ func NewProvider(cfg config.Config) (Provider, error) {
 	case "ollama":
 		url := cfg.Ollama.URL
 		if url == "" {
-			url = "http://localhost:11434"
+			url = config.DefaultOllamaURL
 		}
 		return &OllamaProvider{URL: url, Model: cfg.Ollama.Model}, nil
 	default:

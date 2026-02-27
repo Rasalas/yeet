@@ -9,6 +9,9 @@ import (
 	"github.com/rasalas/yeet/internal/keyring"
 )
 
+// DefaultOllamaURL is the default Ollama API endpoint.
+const DefaultOllamaURL = "http://localhost:11434"
+
 type ProviderConfig struct {
 	Model string `toml:"model,omitempty"`
 	URL   string `toml:"url,omitempty"`
@@ -48,7 +51,7 @@ func DefaultConfig() Config {
 		Provider:  "auto",
 		Anthropic: ProviderConfig{Model: "claude-haiku-4-5-20251001"},
 		OpenAI:    ProviderConfig{Model: "gpt-4o-mini"},
-		Ollama:    ProviderConfig{Model: "llama3", URL: "http://localhost:11434"},
+		Ollama:    ProviderConfig{Model: "llama3", URL: DefaultOllamaURL},
 	}
 }
 

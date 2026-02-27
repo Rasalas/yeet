@@ -9,6 +9,8 @@ import (
 	"strings"
 )
 
+const anthropicVersion = "2023-06-01"
+
 type AnthropicProvider struct {
 	APIKey string
 	Model  string
@@ -61,7 +63,7 @@ func (p *AnthropicProvider) GenerateCommitMessage(ctx CommitContext) (string, Us
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("x-api-key", p.APIKey)
-	req.Header.Set("anthropic-version", "2023-06-01")
+	req.Header.Set("anthropic-version", anthropicVersion)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -118,7 +120,7 @@ func (p *AnthropicProvider) GenerateCommitMessageStream(ctx CommitContext, onTok
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("x-api-key", p.APIKey)
-	req.Header.Set("anthropic-version", "2023-06-01")
+	req.Header.Set("anthropic-version", anthropicVersion)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {

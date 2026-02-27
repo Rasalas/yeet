@@ -39,7 +39,7 @@ func fetchAnthropic(cfg config.Config) ([]string, error) {
 		return nil, err
 	}
 	req.Header.Set("x-api-key", key)
-	req.Header.Set("anthropic-version", "2023-06-01")
+	req.Header.Set("anthropic-version", anthropicVersion)
 
 	return doOpenAIModelList(req)
 }
@@ -47,7 +47,7 @@ func fetchAnthropic(cfg config.Config) ([]string, error) {
 func fetchOllama(cfg config.Config) ([]string, error) {
 	url := cfg.Ollama.URL
 	if url == "" {
-		url = "http://localhost:11434"
+		url = config.DefaultOllamaURL
 	}
 	url = strings.TrimRight(url, "/") + "/api/tags"
 
