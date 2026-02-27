@@ -8,10 +8,8 @@ import (
 	"github.com/rasalas/yeet/internal/ai"
 	"github.com/rasalas/yeet/internal/config"
 	"github.com/rasalas/yeet/internal/git"
-	"github.com/rasalas/yeet/internal/keyring"
 	"github.com/rasalas/yeet/internal/term"
 	"github.com/spf13/cobra"
-	goterm "golang.org/x/term"
 )
 
 var messageFlag string
@@ -207,13 +205,9 @@ func generateOrFallback() (string, *ai.Usage, bool, error) {
 
 		if providerErr != nil {
 			fmt.Println("  Enter commit message:")
-			msg, err := term.EditLine("")
+			msg, err := promptForMessage("")
 			if err != nil {
 				return "", nil, false, err
-			}
-			fmt.Println()
-			if msg == "" {
-				return "", nil, false, fmt.Errorf("empty commit message")
 			}
 			fmt.Printf("\n  tip: run `yeet auth set %s` to enable AI commit messages\n\n", cfg.Provider)
 			return msg, nil, false, nil
@@ -244,13 +238,9 @@ func generateOrFallback() (string, *ai.Usage, bool, error) {
 			term.ClearLine()
 			fmt.Printf("  %s%v%s\n\n", term.Red, err, term.Reset)
 			fmt.Println("  Enter commit message manually:")
-			msg, editErr := term.EditLine(message)
+			msg, editErr := promptForMessage(message)
 			if editErr != nil {
 				return "", nil, false, editErr
-			}
-			fmt.Println()
-			if msg == "" {
-				return "", nil, false, fmt.Errorf("empty commit message")
 			}
 			return msg, nil, false, nil
 		}
@@ -264,13 +254,9 @@ func generateOrFallback() (string, *ai.Usage, bool, error) {
 		fmt.Println(" failed")
 		fmt.Printf("  %s%v%s\n\n", term.Red, err, term.Reset)
 		fmt.Println("  Enter commit message manually:")
-		msg, editErr := term.EditLine("")
+		msg, editErr := promptForMessage("")
 		if editErr != nil {
 			return "", nil, false, editErr
-		}
-		fmt.Println()
-		if msg == "" {
-			return "", nil, false, fmt.Errorf("empty commit message")
 		}
 		return msg, nil, false, nil
 	}
@@ -292,24 +278,20 @@ func generateStreaming(sp ai.StreamingProvider, ctx ai.CommitContext) (string, a
 }
 
 func quickSetup(cfg config.Config) error {
-	fmt.Printf("\n  Enter API key for %s: ", cfg.Provider)
-	key, err := goterm.ReadPassword(int(os.Stdin.Fd()))
 	fmt.Println()
+	return readAndSaveKey(cfg.Provider)
+}
+
+func promptForMessage(initial string) (string, error) {
+	msg, err := term.EditLine(initial)
 	if err != nil {
-		return fmt.Errorf("failed to read key: %w", err)
+		return "", err
 	}
-
-	apiKey := strings.TrimSpace(string(key))
-	if apiKey == "" {
-		return fmt.Errorf("empty key")
+	fmt.Println()
+	if msg == "" {
+		return "", fmt.Errorf("empty commit message")
 	}
-
-	if err := keyring.Set(cfg.Provider, apiKey); err != nil {
-		return fmt.Errorf("failed to save key: %w", err)
-	}
-
-	fmt.Printf("  %s\u2713%s Key saved for %s.\n\n", term.Green, term.Reset, cfg.Provider)
-	return nil
+	return msg, nil
 }
 
 func firstLine(s string) string {

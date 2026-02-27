@@ -83,10 +83,16 @@ func runAuthStatus(cmd *cobra.Command, args []string) error {
 
 func runAuthSet(cmd *cobra.Command, args []string) error {
 	provider := strings.ToLower(args[0])
-	if !isValidProvider(provider) {
-		return fmt.Errorf("unknown provider: %s (valid: %s)", provider, strings.Join(allProviders(), ", "))
+	providers := allProviders()
+	if !isValidProvider(provider, providers) {
+		return fmt.Errorf("unknown provider: %s (valid: %s)", provider, strings.Join(providers, ", "))
 	}
 
+	return readAndSaveKey(provider)
+}
+
+// readAndSaveKey prompts for an API key, trims it, and stores it in the keyring.
+func readAndSaveKey(provider string) error {
 	fmt.Printf("  Enter API key for %s: ", provider)
 	key, err := goterm.ReadPassword(int(os.Stdin.Fd()))
 	fmt.Println()
@@ -103,14 +109,15 @@ func runAuthSet(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to save key: %w", err)
 	}
 
-	fmt.Printf("  %s\u2713%s API key for %s saved to keyring.\n", term.Green, term.Reset, provider)
+	fmt.Printf("  %s\u2713%s Key saved for %s.\n", term.Green, term.Reset, provider)
 	return nil
 }
 
 func runAuthDelete(cmd *cobra.Command, args []string) error {
 	provider := strings.ToLower(args[0])
-	if !isValidProvider(provider) {
-		return fmt.Errorf("unknown provider: %s (valid: %s)", provider, strings.Join(allProviders(), ", "))
+	providers := allProviders()
+	if !isValidProvider(provider, providers) {
+		return fmt.Errorf("unknown provider: %s (valid: %s)", provider, strings.Join(providers, ", "))
 	}
 
 	if err := keyring.Delete(provider); err != nil {
@@ -128,8 +135,9 @@ func runAuthImport(cmd *cobra.Command, args []string) error {
 	var targets []string
 	if len(args) == 1 {
 		p := strings.ToLower(args[0])
-		if !isValidProvider(p) {
-			return fmt.Errorf("unknown provider: %s (valid: %s)", p, strings.Join(allProviders(), ", "))
+		providers := allProviders()
+		if !isValidProvider(p, providers) {
+			return fmt.Errorf("unknown provider: %s (valid: %s)", p, strings.Join(providers, ", "))
 		}
 		targets = []string{p}
 	} else {
@@ -187,8 +195,8 @@ func allProviders() []string {
 	return cfg.AllProviders()
 }
 
-func isValidProvider(p string) bool {
-	for _, v := range allProviders() {
+func isValidProvider(p string, providers []string) bool {
+	for _, v := range providers {
 		if v == p {
 			return true
 		}
