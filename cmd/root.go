@@ -26,12 +26,12 @@ var (
 	green  = "\033[32m"
 	reset  = "\033[0m"
 
-	// Commit message display: colored left bar on gray background (no gap).
-	// \033[39m resets only foreground, keeping the gray bg active.
-	msgBar   = "\033[35m\033[48;2;40;40;45m▎\033[39m"                 // purple bar on gray bg, then reset fg
-	msgBg    = "\033[48;2;40;40;45m"                                  // gray background only
-	msgOpen  = "\033[35m\033[48;2;40;40;45m▎\033[39m\033[1m "          // bar on gray bg + bold + 1 space (▎ counts as 1 char)
-	msgClose = "  \033[0m"                                            // 2 trailing spaces + full reset
+	// Commit message display: colored left bar on warm dark background (no gap).
+	// \033[39m resets only foreground, keeping the bg active.
+	msgBar   = "\033[38;2;255;140;66m\033[48;2;44;36;30m▎\033[39m"                 // mango bar on warm-dark bg, then reset fg
+	msgBg    = "\033[48;2;44;36;30m"                                               // warm dark background only
+	msgOpen  = "\033[38;2;255;140;66m\033[48;2;44;36;30m▎\033[39m\033[1m "          // bar on warm-dark bg + bold + 1 space (▎ counts as 1 char)
+	msgClose = "  \033[0m"                                                         // 2 trailing spaces + full reset
 	msgPad   = 2                                                      // visible trailing chars in msgClose
 )
 

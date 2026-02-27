@@ -12,13 +12,13 @@ import (
 )
 
 var (
-	colorPrimary   = lipgloss.Color("#7C3AED")
-	colorSecondary = lipgloss.Color("#A78BFA")
-	colorMuted     = lipgloss.Color("#6B7280")
-	colorSuccess   = lipgloss.Color("#10B981")
-	colorDanger    = lipgloss.Color("#EF4444")
-	colorWarning   = lipgloss.Color("#F59E0B")
-	colorText      = lipgloss.Color("#F9FAFB")
+	colorPrimary   = lipgloss.Color("#FF8C42")
+	colorSecondary = lipgloss.Color("#FFB074")
+	colorMuted     = lipgloss.Color("#78716C")
+	colorSuccess   = lipgloss.Color("#4ADE80")
+	colorDanger    = lipgloss.Color("#FF6B6B")
+	colorWarning   = lipgloss.Color("#FBBF24")
+	colorText      = lipgloss.Color("#FEF9F3")
 
 	styleTitle    = lipgloss.NewStyle().Bold(true).Foreground(colorPrimary)
 	styleSelected = lipgloss.NewStyle().Foreground(colorPrimary).Bold(true)
