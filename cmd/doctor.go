@@ -22,18 +22,6 @@ func init() {
 		},
 	})
 
-	// Keep "log" as a hidden alias pointing to doctor.
-	rootCmd.AddCommand(&cobra.Command{
-		Use:    "log",
-		Hidden: true,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if len(args) > 0 {
-				return RunAsCommit("log", args)
-			}
-			fmt.Printf("  %s\"yeet log\" is now \"yeet doctor\".%s\n\n", term.Dim, term.Reset)
-			return runDoctor()
-		},
-	})
 }
 
 func runDoctor() error {
