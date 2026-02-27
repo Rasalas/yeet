@@ -219,27 +219,55 @@ func parsePR(raw string) (title, body string) {
 	return
 }
 
-// displayPRPreview shows the PR title in card style and the body dimmed below.
+// displayPRPreview shows the PR title and body inside a single card.
 // Returns the number of terminal lines used (for ClearLines).
 func displayPRPreview(title, body string) int {
 	lines := 0
 
-	if term.MsgBg != "" {
-		pad := strings.Repeat(" ", len([]rune(title))+3)
-		fmt.Printf("  %s%s%s\n", term.MsgBar, pad, term.Reset)
-		fmt.Printf("  %s%s%s\n", term.MsgOpen, title, term.MsgClose)
-		fmt.Printf("  %s%s%s\n", term.MsgBar, pad, term.Reset)
-		lines = 3
-	} else {
-		fmt.Printf("  %s%s%s\n", term.MsgOpen, title, term.MsgClose)
-		lines = 1
+	// Collect all content lines: title + blank + body
+	var content []string
+	content = append(content, "# "+title)
+	if body != "" {
+		content = append(content, "")
+		content = append(content, strings.Split(body, "\n")...)
 	}
 
-	if body != "" {
-		fmt.Println()
+	// Find the widest line for padding
+	maxWidth := 0
+	for _, line := range content {
+		if w := len([]rune(line)); w > maxWidth {
+			maxWidth = w
+		}
+	}
+
+	if term.MsgBg != "" {
+		pad := strings.Repeat(" ", maxWidth+3)
+		// Top border
+		fmt.Printf("  %s%s%s\n", term.MsgBar, pad, term.Reset)
 		lines++
-		for _, line := range strings.Split(body, "\n") {
-			fmt.Printf("  %s%s%s\n", term.Dim, line, term.Reset)
+		// Content lines
+		for i, line := range content {
+			rpad := strings.Repeat(" ", maxWidth-len([]rune(line)))
+			if i == 0 {
+				// Title: bold
+				fmt.Printf("  %s%s%s%s\n", term.MsgOpen, line, rpad, term.MsgClose)
+			} else {
+				// Body: dim on card bg
+				fmt.Printf("  %s%s%s%s %s%s\n", term.MsgBar, term.Dim, line, rpad, term.Reset, "")
+			}
+			lines++
+		}
+		// Bottom border
+		fmt.Printf("  %s%s%s\n", term.MsgBar, pad, term.Reset)
+		lines++
+	} else {
+		// NO_COLOR fallback
+		for i, line := range content {
+			if i == 0 {
+				fmt.Printf("  %s%s%s\n", term.MsgOpen, line, term.MsgClose)
+			} else {
+				fmt.Printf("  %s\n", line)
+			}
 			lines++
 		}
 	}
