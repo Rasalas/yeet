@@ -100,11 +100,12 @@ func TestTruncateDiff(t *testing.T) {
 }
 
 func TestLoadPrompt(t *testing.T) {
-	// Use a temp dir to avoid touching the real config
+	// Use a temp dir to avoid touching the real config.
+	// Set XDG_CONFIG_HOME so xdg.ConfigDir() uses our temp dir
+	// (os.UserHomeDir() on Linux reads /etc/passwd, not $HOME).
 	tmpDir := t.TempDir()
-	origHome := os.Getenv("HOME")
-	os.Setenv("HOME", tmpDir)
-	defer os.Setenv("HOME", origHome)
+	xdgDir := filepath.Join(tmpDir, "config")
+	t.Setenv("XDG_CONFIG_HOME", xdgDir)
 
 	t.Run("default creation", func(t *testing.T) {
 		got := LoadPrompt()
@@ -113,7 +114,7 @@ func TestLoadPrompt(t *testing.T) {
 		}
 
 		// File should now exist
-		path := filepath.Join(tmpDir, ".config", "yeet", "prompt.txt")
+		path := filepath.Join(xdgDir, "yeet", "prompt.txt")
 		data, err := os.ReadFile(path)
 		if err != nil {
 			t.Fatalf("prompt file not created: %v", err)
@@ -149,9 +150,7 @@ func TestLoadPrompt(t *testing.T) {
 
 func TestWritePrompt(t *testing.T) {
 	tmpDir := t.TempDir()
-	origHome := os.Getenv("HOME")
-	os.Setenv("HOME", tmpDir)
-	defer os.Setenv("HOME", origHome)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmpDir, "config"))
 
 	content := "custom system prompt"
 	if err := WritePrompt(content); err != nil {
