@@ -81,7 +81,7 @@ func (p *OllamaProvider) GenerateCommitMessageStream(ctx CommitContext, onToken 
 		Stream: true,
 	}
 
-	resp, err := doStream(p.apiURL(), body, nil)
+	resp, err := doStream(context.Background(), p.apiURL(), body, nil)
 	if err != nil {
 		return "", Usage{}, fmt.Errorf("API request failed (is Ollama running at %s?): %w", p.URL, err)
 	}

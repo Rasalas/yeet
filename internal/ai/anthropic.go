@@ -89,7 +89,7 @@ func (p *AnthropicProvider) GenerateCommitMessageStream(ctx CommitContext, onTok
 		Stream:    true,
 	}
 
-	resp, err := doStream("https://api.anthropic.com/v1/messages", body, p.headers())
+	resp, err := doStream(context.Background(), "https://api.anthropic.com/v1/messages", body, p.headers())
 	if err != nil {
 		return "", Usage{}, err
 	}
@@ -107,7 +107,7 @@ func (p *AnthropicProvider) GenerateCommitMessageStream(ctx CommitContext, onTok
 	var full strings.Builder
 	usage := Usage{Model: p.Model}
 
-	parseSSE(resp.Body, func(eventType, data string) {
+	if err := parseSSE(resp.Body, func(eventType, data string) {
 		switch eventType {
 		case "content_block_delta":
 			var delta struct {
@@ -140,7 +140,9 @@ func (p *AnthropicProvider) GenerateCommitMessageStream(ctx CommitContext, onTok
 				usage.OutputTokens = msg.Usage.OutputTokens
 			}
 		}
-	})
+	}); err != nil {
+		return "", Usage{}, fmt.Errorf("stream read error: %w", err)
+	}
 
 	return strings.TrimSpace(full.String()), usage, nil
 }

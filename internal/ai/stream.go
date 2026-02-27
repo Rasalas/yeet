@@ -14,7 +14,8 @@ type StreamingProvider interface {
 
 // parseSSE reads Server-Sent Events from a reader and calls the handler for each event.
 // It recognizes "event:" and "data:" fields and triggers the callback on blank lines.
-func parseSSE(r io.Reader, handler func(eventType, data string)) {
+// Returns any scanner error encountered during reading.
+func parseSSE(r io.Reader, handler func(eventType, data string)) error {
 	scanner := bufio.NewScanner(r)
 	var eventType, data string
 
@@ -42,4 +43,6 @@ func parseSSE(r io.Reader, handler func(eventType, data string)) {
 	if data != "" {
 		handler(eventType, data)
 	}
+
+	return scanner.Err()
 }

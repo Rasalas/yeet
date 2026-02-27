@@ -65,13 +65,13 @@ func doRequest(ctx context.Context, method, url string, body any, headers map[st
 
 // doStream sends a JSON request and returns the open response for streaming.
 // The caller is responsible for closing resp.Body.
-func doStream(url string, body any, headers map[string]string) (*http.Response, error) {
+func doStream(ctx context.Context, url string, body any, headers map[string]string) (*http.Response, error) {
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	req, err := http.NewRequest("POST", url, bytes.NewReader(jsonBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(jsonBody))
 	if err != nil {
 		return nil, err
 	}

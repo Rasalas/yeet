@@ -158,8 +158,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "enter":
 			selected := m.entries[m.cursor]
 			m.cfg.Provider = selected.name
-			config.Save(m.cfg)
-			m.message = styleSuccess.Render(fmt.Sprintf("  ✓ Provider set to %s", selected.label))
+			if err := config.Save(m.cfg); err != nil {
+				m.message = styleDanger.Render(fmt.Sprintf("  ✗ Failed to save config: %v", err))
+			} else {
+				m.message = styleSuccess.Render(fmt.Sprintf("  ✓ Provider set to %s", selected.label))
+			}
 		case "m":
 			e := m.entries[m.cursor]
 			if e.name == "auto" {
@@ -180,9 +183,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if def == "" || e.name == "auto" {
 				break
 			}
-			m.saveModel(e.name, def)
-			m.entries[m.cursor].model = def
-			m.message = styleSuccess.Render(fmt.Sprintf("  ✓ %s reset to %s", e.label, def))
+			if err := m.saveModel(e.name, def); err != nil {
+				m.message = styleDanger.Render(fmt.Sprintf("  ✗ Failed to save config: %v", err))
+			} else {
+				m.entries[m.cursor].model = def
+				m.message = styleSuccess.Render(fmt.Sprintf("  ✓ %s reset to %s", e.label, def))
+			}
 		}
 	}
 	return m, nil
@@ -307,9 +313,12 @@ func (m *model) updatePicking(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		m.picking = false
 		e := m.entries[m.cursor]
-		m.saveModel(e.name, chosen)
-		m.entries[m.cursor].model = chosen
-		m.message = styleSuccess.Render(fmt.Sprintf("  ✓ Model for %s set to %s", e.label, chosen))
+		if err := m.saveModel(e.name, chosen); err != nil {
+			m.message = styleDanger.Render(fmt.Sprintf("  ✗ Failed to save config: %v", err))
+		} else {
+			m.entries[m.cursor].model = chosen
+			m.message = styleSuccess.Render(fmt.Sprintf("  ✓ Model for %s set to %s", e.label, chosen))
+		}
 		m.pickModels = nil
 		m.pickFiltered = nil
 		m.pickFilter = ""
@@ -328,7 +337,7 @@ func (m *model) updatePicking(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m *model) saveModel(provider, newModel string) {
+func (m *model) saveModel(provider, newModel string) error {
 	switch provider {
 	case "anthropic":
 		m.cfg.Anthropic.Model = newModel
@@ -353,7 +362,7 @@ func (m *model) saveModel(provider, newModel string) {
 		}
 		m.cfg.Custom[provider] = pc
 	}
-	config.Save(m.cfg)
+	return config.Save(m.cfg)
 }
 
 func (m model) View() string {

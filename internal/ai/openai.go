@@ -102,7 +102,7 @@ func (p *OpenAIProvider) GenerateCommitMessageStream(ctx CommitContext, onToken 
 		StreamOptions: &openaiStreamOpts{IncludeUsage: true},
 	}
 
-	resp, err := doStream(p.baseURL()+"/chat/completions", body, p.headers())
+	resp, err := doStream(context.Background(), p.baseURL()+"/chat/completions", body, p.headers())
 	if err != nil {
 		return "", Usage{}, err
 	}
@@ -120,7 +120,7 @@ func (p *OpenAIProvider) GenerateCommitMessageStream(ctx CommitContext, onToken 
 	var full strings.Builder
 	usage := Usage{Model: p.Model}
 
-	parseSSE(resp.Body, func(eventType, data string) {
+	if err := parseSSE(resp.Body, func(eventType, data string) {
 		if data == "[DONE]" {
 			return
 		}
@@ -151,7 +151,9 @@ func (p *OpenAIProvider) GenerateCommitMessageStream(ctx CommitContext, onToken 
 			usage.InputTokens = chunk.Usage.PromptTokens
 			usage.OutputTokens = chunk.Usage.CompletionTokens
 		}
-	})
+	}); err != nil {
+		return "", Usage{}, fmt.Errorf("stream read error: %w", err)
+	}
 
 	return strings.TrimSpace(full.String()), usage, nil
 }
