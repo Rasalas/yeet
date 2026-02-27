@@ -28,7 +28,13 @@ var (
 	styleDanger   = lipgloss.NewStyle().Foreground(colorDanger)
 	styleWarning  = lipgloss.NewStyle().Foreground(colorWarning)
 	styleLabel    = lipgloss.NewStyle().Foreground(colorSecondary).Bold(true)
+	styleBullet   = lipgloss.NewStyle().Foreground(colorMuted)
 )
+
+// helpEntry formats a keybinding: key in bright text, description in muted.
+func helpEntry(key, desc string) string {
+	return styleNormal.Render(key) + styleHelp.Render(" "+desc)
+}
 
 type entry struct {
 	name  string
@@ -362,59 +368,69 @@ func (m model) View() string {
 	var b strings.Builder
 
 	b.WriteString("\n")
-	b.WriteString(styleTitle.Render("  Which provider should generate commit messages?"))
+	b.WriteString(styleTitle.Render("  Provider"))
 	b.WriteString("\n\n")
 
 	active := m.cfg.Provider
 
 	for i, e := range m.entries {
-		cursor := "    "
+		isActive := e.name == active
+
+		// Radio button: ◉ active, ○ inactive
+		radio := "○"
+		if isActive {
+			radio = "◉"
+		}
+
+		// Line 1: radio + label + key status
 		if i == m.cursor {
-			cursor = "  > "
-		}
-
-		style := styleNormal
-		if i == m.cursor {
-			style = styleSelected
-		}
-
-		b.WriteString(style.Render(cursor + e.label))
-
-		// Model
-		if e.name == "auto" {
-			if e.model != "" {
-				b.WriteString(styleHelp.Render("  → " + e.model))
+			b.WriteString(styleSelected.Render("  " + radio + " " + e.label))
+		} else {
+			radioStyle := styleBullet
+			if isActive {
+				radioStyle = styleSuccess
 			}
-		} else if e.model != "" {
-			def := config.DefaultModel(e.name)
-			if def != "" && e.model != def {
-				b.WriteString(styleWarning.Render("  " + e.model))
-				b.WriteString(styleHelp.Render(fmt.Sprintf("  (default: %s, r to reset)", def)))
-			} else {
-				b.WriteString(styleHelp.Render("  " + e.model))
-			}
+			b.WriteString(radioStyle.Render("  "+radio+" ") + styleNormal.Render(e.label))
 		}
 
-		// Key status
+		// Key status (simplified: just ✓ or ✗)
 		if e.name != "auto" && e.name != "ollama" {
 			if e.key.Found {
 				b.WriteString("  " + styleSuccess.Render("✓"))
 			} else {
-				b.WriteString("  " + styleDanger.Render("✗ no key"))
+				b.WriteString("  " + styleDanger.Render("✗"))
 			}
 		}
 
-		// Active marker
-		if e.name == active {
-			b.WriteString(styleLabel.Render("  ← active"))
-		}
-
 		b.WriteString("\n")
+
+		// Line 2: model (indented, secondary)
+		if e.name == "auto" {
+			if e.model != "" {
+				b.WriteString(styleHelp.Render("    → " + e.model))
+				b.WriteString("\n")
+			}
+		} else if e.model != "" {
+			def := config.DefaultModel(e.name)
+			if def != "" && e.model != def {
+				b.WriteString("    " + styleWarning.Render(e.model))
+				b.WriteString(styleHelp.Render("  (r reset)"))
+				b.WriteString("\n")
+			} else {
+				b.WriteString(styleHelp.Render("    " + e.model))
+				b.WriteString("\n")
+			}
+		}
 
 		// Separator after "auto"
 		if e.name == "auto" {
 			sep := strings.Repeat("─", max(m.width-4, 40))
 			b.WriteString(styleHelp.Render("  " + sep))
+			b.WriteString("\n")
+		}
+
+		// Blank line between entries
+		if i < len(m.entries)-1 {
 			b.WriteString("\n")
 		}
 	}
@@ -424,7 +440,11 @@ func (m model) View() string {
 	}
 
 	b.WriteString("\n")
-	b.WriteString(styleHelp.Render("  ↑/↓ navigate · Enter set provider · m change model · q quit"))
+	help := helpEntry("↑/↓", "navigate") + styleHelp.Render("  ·  ") +
+		helpEntry("enter", "select") + styleHelp.Render("  ·  ") +
+		helpEntry("m", "model") + styleHelp.Render("  ·  ") +
+		helpEntry("q", "quit")
+	b.WriteString("  " + help)
 	b.WriteString("\n")
 
 	return b.String()
@@ -443,7 +463,7 @@ func (m model) viewModelPicker() string {
 	if m.pickLoading {
 		b.WriteString(styleHelp.Render("  Fetching models..."))
 		b.WriteString("\n\n")
-		b.WriteString(styleHelp.Render("  Esc cancel"))
+		b.WriteString("  " + helpEntry("esc", "cancel"))
 		b.WriteString("\n")
 		return b.String()
 	}
@@ -489,17 +509,12 @@ func (m model) viewModelPicker() string {
 
 	for i := scrollStart; i < scrollEnd; i++ {
 		name := m.pickFiltered[i]
-		cursor := "    "
-		if i == m.pickCursor {
-			cursor = "  > "
-		}
 
-		style := styleNormal
 		if i == m.pickCursor {
-			style = styleSelected
+			b.WriteString(styleSelected.Render("  › " + name))
+		} else {
+			b.WriteString(styleBullet.Render("  · ") + styleNormal.Render(name))
 		}
-
-		b.WriteString(style.Render(cursor + name))
 
 		if name == currentModel {
 			b.WriteString(styleLabel.Render("  ← current"))
@@ -524,22 +539,20 @@ func (m model) viewModelPicker() string {
 		}
 
 		idx := len(m.pickFiltered)
-		cursor := "    "
+		label := fmt.Sprintf(`Use "%s" as model name`, m.pickFilter)
 		if m.pickCursor == idx {
-			cursor = "  > "
+			b.WriteString(styleSelected.Render("  › " + label))
+		} else {
+			b.WriteString(styleBullet.Render("  · ") + styleNormal.Render(label))
 		}
-
-		style := styleNormal
-		if m.pickCursor == idx {
-			style = styleSelected
-		}
-
-		b.WriteString(style.Render(fmt.Sprintf(`%sUse "%s" as model name`, cursor, m.pickFilter)))
 		b.WriteString("\n")
 	}
 
 	b.WriteString("\n")
-	b.WriteString(styleHelp.Render("  ↑/↓ navigate · Enter select · Esc back"))
+	help := helpEntry("↑/↓", "navigate") + styleHelp.Render("  ·  ") +
+		helpEntry("enter", "select") + styleHelp.Render("  ·  ") +
+		helpEntry("esc", "back")
+	b.WriteString("  " + help)
 	b.WriteString("\n")
 
 	return b.String()

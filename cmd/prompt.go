@@ -35,7 +35,7 @@ var promptCmd = &cobra.Command{
 			return fmt.Errorf("editor exited with error: %w", err)
 		}
 
-		fmt.Println("  ✓ Prompt saved.")
+		fmt.Printf("  %s✓%s Prompt saved.\n", green, reset)
 		return nil
 	},
 }
@@ -47,7 +47,7 @@ var promptResetCmd = &cobra.Command{
 		if err := ai.WritePrompt(ai.DefaultPrompt); err != nil {
 			return fmt.Errorf("failed to reset prompt: %w", err)
 		}
-		fmt.Println("  ✓ Prompt reset to default.")
+		fmt.Printf("  %s✓%s Prompt reset to default.\n", green, reset)
 		return nil
 	},
 }

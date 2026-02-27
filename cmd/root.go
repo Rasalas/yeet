@@ -28,6 +28,11 @@ var (
 	reset  = "\033[0m"
 )
 
+// keyhint formats a keybinding: key in bold, description in dim.
+func keyhint(key, desc string) string {
+	return reset + bold + key + reset + dim + " " + desc
+}
+
 func init() {
 	if os.Getenv("NO_COLOR") != "" {
 		bold = ""
@@ -82,7 +87,7 @@ func runYeet(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to get diff stat: %w", err)
 	}
 	if stat == "" {
-		fmt.Println("\n  Nothing to commit.")
+		fmt.Printf("\n  %sNothing to commit.%s\n", dim, reset)
 		return nil
 	}
 	fmt.Println()
@@ -110,12 +115,18 @@ func runYeet(cmd *cobra.Command, args []string) error {
 	showMessage := !streamed // skip first display if already streamed
 	for {
 		if showMessage {
-			fmt.Printf("  %s%s> %s%s\n\n", bold, purple, message, reset)
+			fmt.Printf("  %s%s› %s%s\n\n", bold, purple, message, reset)
 		} else {
 			fmt.Println()
 			showMessage = true // always show on subsequent iterations (after edit)
 		}
-		fmt.Printf("  %sEnter commit  ·  e edit  ·  E $EDITOR  ·  Esc cancel%s\n", dim, reset)
+		fmt.Printf("  %s%s  ·  %s  ·  %s  ·  %s%s\n",
+			dim,
+			keyhint("enter", "commit"),
+			keyhint("e", "edit"),
+			keyhint("E", "editor"),
+			keyhint("esc", "cancel"),
+			reset)
 
 		action, err := waitForAction()
 		if err != nil {
@@ -130,7 +141,7 @@ func runYeet(cmd *cobra.Command, args []string) error {
 					return fmt.Errorf("failed to unstage changes: %w", err)
 				}
 			}
-			fmt.Println("  Cancelled.")
+			fmt.Printf("  %sCancelled.%s\n", dim, reset)
 			return nil
 		case actionEdit:
 			edited, err := editLine(message)
@@ -163,7 +174,7 @@ func runYeet(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("commit failed: %s", out)
 	}
-	fmt.Println("  " + firstLine(out))
+	fmt.Printf("  %s✓%s %s\n", green, reset, firstLine(out))
 
 	// 7. Push
 	pushOut, err := git.Push()
@@ -176,7 +187,7 @@ func runYeet(cmd *cobra.Command, args []string) error {
 	}
 
 	branch, _ := git.CurrentBranch()
-	fmt.Printf("  %sPushed to origin/%s.%s\n", green, branch, reset)
+	fmt.Printf("  %s✓%s %spushed to%s origin/%s\n", green, reset, dim, reset, branch)
 
 	if usage != nil && usage.InputTokens > 0 {
 		costLine := fmt.Sprintf("%s · %s", usage.FormatTokens(), usage.Model)
@@ -330,7 +341,7 @@ func generateStreaming(sp ai.StreamingProvider, ctx ai.CommitContext) (string, a
 		if !firstToken {
 			firstToken = true
 			fmt.Printf("\r\033[K") // clear spinner line
-			fmt.Printf("  %s%s> %s", bold, purple, token)
+			fmt.Printf("  %s%s› %s", bold, purple, token)
 		} else {
 			fmt.Print(token)
 		}
@@ -366,7 +377,7 @@ func quickSetup(cfg config.Config) error {
 		return fmt.Errorf("failed to save key: %w", err)
 	}
 
-	fmt.Printf("  ✓ Key saved for %s.\n\n", cfg.Provider)
+	fmt.Printf("  %s✓%s Key saved for %s.\n\n", green, reset, cfg.Provider)
 	return nil
 }
 
@@ -446,7 +457,7 @@ func editLine(initial string) (string, error) {
 
 	redraw := func() {
 		fmt.Print("\r\033[2K")
-		fmt.Printf("  > %s", string(line))
+		fmt.Printf("  › %s", string(line))
 		// move cursor to correct position
 		back := len(line) - cursor
 		if back > 0 {

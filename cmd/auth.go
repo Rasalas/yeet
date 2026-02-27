@@ -62,19 +62,18 @@ func runAuthStatus(cmd *cobra.Command, args []string) error {
 	providers := cfg.AllProviders()
 	status := keyring.Status(providers, cfg.CustomEnvs())
 
-	fmt.Println("\n  API Key Status:")
-	fmt.Println()
+	fmt.Printf("\n  %sAPI Keys%s\n\n", bold, reset)
 	for _, p := range providers {
 		info := status[p]
 		if info.Found {
 			source := string(info.Source)
-			line := fmt.Sprintf("  ✓  %-16s(%s)", p, source)
+			line := fmt.Sprintf("  %s✓%s  %-16s%s%s%s", green, reset, p, dim, source, reset)
 			if info.Source != keyring.SourceKeyring {
-				line += fmt.Sprintf("  ← yeet auth import %s", p)
+				line += fmt.Sprintf("  %s← yeet auth import %s%s", dim, p, reset)
 			}
 			fmt.Println(line)
 		} else {
-			fmt.Printf("  ✗  %s\n", p)
+			fmt.Printf("  %s✗%s  %s\n", red, reset, p)
 		}
 	}
 	fmt.Println()
@@ -103,7 +102,7 @@ func runAuthSet(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to save key: %w", err)
 	}
 
-	fmt.Printf("  ✓ API key for %s saved to keyring.\n", provider)
+	fmt.Printf("  %s✓%s API key for %s saved to keyring.\n", green, reset, provider)
 	return nil
 }
 
@@ -117,7 +116,7 @@ func runAuthDelete(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to delete key: %w", err)
 	}
 
-	fmt.Printf("  ✓ API key for %s removed from keyring.\n", provider)
+	fmt.Printf("  %s✓%s API key for %s removed from keyring.\n", green, reset, provider)
 	return nil
 }
 
@@ -141,26 +140,26 @@ func runAuthImport(cmd *cobra.Command, args []string) error {
 		key, source := keyring.Resolve(p, envs[p])
 		if key == "" {
 			if len(args) == 1 {
-				fmt.Printf("  ✗ %s: no key found to import\n", p)
+				fmt.Printf("  %s✗%s %s: no key found to import\n", red, reset, p)
 			}
 			continue
 		}
 		if source == keyring.SourceKeyring {
 			if len(args) == 1 {
-				fmt.Printf("  · %s: already in keyring\n", p)
+				fmt.Printf("  %s·%s %s: already in keyring\n", dim, reset, p)
 			}
 			continue
 		}
 		if err := keyring.Set(p, key); err != nil {
-			fmt.Printf("  ✗ %s: failed to import: %v\n", p, err)
+			fmt.Printf("  %s✗%s %s: failed to import: %v\n", red, reset, p, err)
 			continue
 		}
-		fmt.Printf("  ✓ %s: imported from %s to keyring\n", p, source)
+		fmt.Printf("  %s✓%s %s: imported from %s to keyring\n", green, reset, p, source)
 		imported++
 	}
 
 	if len(args) == 0 && imported == 0 {
-		fmt.Println("  Nothing to import.")
+		fmt.Printf("  %sNothing to import.%s\n", dim, reset)
 	}
 
 	return nil
@@ -172,12 +171,12 @@ func runAuthReset(cmd *cobra.Command, args []string) error {
 	deleted := 0
 	for _, p := range providers {
 		if err := keyring.Delete(p); err == nil {
-			fmt.Printf("  ✓ %s removed\n", p)
+			fmt.Printf("  %s✓%s %s removed\n", green, reset, p)
 			deleted++
 		}
 	}
 	if deleted == 0 {
-		fmt.Println("  No keys in keyring.")
+		fmt.Printf("  %sNo keys in keyring.%s\n", dim, reset)
 	}
 	return nil
 }
