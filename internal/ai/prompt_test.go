@@ -1,6 +1,8 @@
 package ai
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -93,6 +95,124 @@ func TestTruncateDiff(t *testing.T) {
 		// Verify valid UTF-8 by checking the result is usable
 		if len(got) == 0 {
 			t.Error("truncated to empty")
+		}
+	})
+}
+
+func TestLoadPrompt(t *testing.T) {
+	// Use a temp dir to avoid touching the real config
+	tmpDir := t.TempDir()
+	origHome := os.Getenv("HOME")
+	os.Setenv("HOME", tmpDir)
+	defer os.Setenv("HOME", origHome)
+
+	t.Run("default creation", func(t *testing.T) {
+		got := LoadPrompt()
+		if got != DefaultPrompt {
+			t.Errorf("LoadPrompt() on fresh dir returned unexpected prompt")
+		}
+
+		// File should now exist
+		path := filepath.Join(tmpDir, ".config", "yeet", "prompt.txt")
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("prompt file not created: %v", err)
+		}
+		if strings.TrimSpace(string(data)) != DefaultPrompt {
+			t.Error("written default prompt doesn't match DefaultPrompt")
+		}
+	})
+
+	t.Run("custom prompt", func(t *testing.T) {
+		custom := "You are a test prompt."
+		if err := WritePrompt(custom); err != nil {
+			t.Fatalf("WritePrompt failed: %v", err)
+		}
+
+		got := LoadPrompt()
+		if got != custom {
+			t.Errorf("LoadPrompt() = %q, want %q", got, custom)
+		}
+	})
+
+	t.Run("empty file returns default", func(t *testing.T) {
+		if err := WritePrompt(""); err != nil {
+			t.Fatalf("WritePrompt failed: %v", err)
+		}
+
+		got := LoadPrompt()
+		if got != DefaultPrompt {
+			t.Errorf("LoadPrompt() with empty file = %q, want default", got)
+		}
+	})
+}
+
+func TestWritePrompt(t *testing.T) {
+	tmpDir := t.TempDir()
+	origHome := os.Getenv("HOME")
+	os.Setenv("HOME", tmpDir)
+	defer os.Setenv("HOME", origHome)
+
+	content := "custom system prompt"
+	if err := WritePrompt(content); err != nil {
+		t.Fatalf("WritePrompt failed: %v", err)
+	}
+
+	got := LoadPrompt()
+	if got != content {
+		t.Errorf("read-back = %q, want %q", got, content)
+	}
+}
+
+func TestPromptPath(t *testing.T) {
+	path, err := PromptPath()
+	if err != nil {
+		t.Fatalf("PromptPath failed: %v", err)
+	}
+	if path == "" {
+		t.Error("PromptPath returned empty string")
+	}
+	if !strings.HasSuffix(path, "prompt.txt") {
+		t.Errorf("PromptPath = %q, expected to end with prompt.txt", path)
+	}
+}
+
+func TestEffectivePrompt(t *testing.T) {
+	t.Run("with override", func(t *testing.T) {
+		ctx := CommitContext{SystemPrompt: "custom prompt"}
+		if got := ctx.EffectivePrompt(); got != "custom prompt" {
+			t.Errorf("EffectivePrompt = %q, want %q", got, "custom prompt")
+		}
+	})
+
+	t.Run("without override", func(t *testing.T) {
+		ctx := CommitContext{}
+		got := ctx.EffectivePrompt()
+		if got == "" {
+			t.Error("EffectivePrompt returned empty string without override")
+		}
+	})
+}
+
+func TestEffectiveMaxTokens(t *testing.T) {
+	t.Run("with override", func(t *testing.T) {
+		ctx := CommitContext{MaxTokens: 1024}
+		if got := ctx.EffectiveMaxTokens(); got != 1024 {
+			t.Errorf("EffectiveMaxTokens = %d, want 1024", got)
+		}
+	})
+
+	t.Run("default", func(t *testing.T) {
+		ctx := CommitContext{}
+		if got := ctx.EffectiveMaxTokens(); got != 256 {
+			t.Errorf("EffectiveMaxTokens = %d, want 256", got)
+		}
+	})
+
+	t.Run("zero uses default", func(t *testing.T) {
+		ctx := CommitContext{MaxTokens: 0}
+		if got := ctx.EffectiveMaxTokens(); got != 256 {
+			t.Errorf("EffectiveMaxTokens = %d, want 256", got)
 		}
 	})
 }

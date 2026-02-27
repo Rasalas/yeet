@@ -10,9 +10,12 @@ func TestParseSSE(t *testing.T) {
 		input := "event: message\ndata: hello\n\nevent: message\ndata: world\n\n"
 		var events []struct{ typ, data string }
 
-		parseSSE(strings.NewReader(input), func(eventType, data string) {
+		err := parseSSE(strings.NewReader(input), func(eventType, data string) {
 			events = append(events, struct{ typ, data string }{eventType, data})
 		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 
 		if len(events) != 2 {
 			t.Fatalf("got %d events, want 2", len(events))
@@ -29,9 +32,12 @@ func TestParseSSE(t *testing.T) {
 		input := "data: {\"text\":\"hi\"}\n\n"
 		var events []struct{ typ, data string }
 
-		parseSSE(strings.NewReader(input), func(eventType, data string) {
+		err := parseSSE(strings.NewReader(input), func(eventType, data string) {
 			events = append(events, struct{ typ, data string }{eventType, data})
 		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 
 		if len(events) != 1 {
 			t.Fatalf("got %d events, want 1", len(events))
@@ -48,9 +54,12 @@ func TestParseSSE(t *testing.T) {
 		input := "data: {\"content\":\"tok\"}\n\ndata: [DONE]\n\n"
 		var datas []string
 
-		parseSSE(strings.NewReader(input), func(eventType, data string) {
+		err := parseSSE(strings.NewReader(input), func(eventType, data string) {
 			datas = append(datas, data)
 		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 
 		if len(datas) != 2 {
 			t.Fatalf("got %d events, want 2", len(datas))
@@ -64,9 +73,12 @@ func TestParseSSE(t *testing.T) {
 		input := "data: trailing"
 		var datas []string
 
-		parseSSE(strings.NewReader(input), func(eventType, data string) {
+		err := parseSSE(strings.NewReader(input), func(eventType, data string) {
 			datas = append(datas, data)
 		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 
 		if len(datas) != 1 {
 			t.Fatalf("got %d events, want 1", len(datas))
@@ -78,9 +90,12 @@ func TestParseSSE(t *testing.T) {
 
 	t.Run("empty input", func(t *testing.T) {
 		var count int
-		parseSSE(strings.NewReader(""), func(eventType, data string) {
+		err := parseSSE(strings.NewReader(""), func(eventType, data string) {
 			count++
 		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 		if count != 0 {
 			t.Errorf("got %d events for empty input", count)
 		}
@@ -88,9 +103,12 @@ func TestParseSSE(t *testing.T) {
 
 	t.Run("blank lines only", func(t *testing.T) {
 		var count int
-		parseSSE(strings.NewReader("\n\n\n"), func(eventType, data string) {
+		err := parseSSE(strings.NewReader("\n\n\n"), func(eventType, data string) {
 			count++
 		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 		if count != 0 {
 			t.Errorf("got %d events for blank lines", count)
 		}
@@ -111,9 +129,12 @@ data: {"usage":{"output_tokens":5}}
 
 `
 		var events []struct{ typ, data string }
-		parseSSE(strings.NewReader(input), func(eventType, data string) {
+		err := parseSSE(strings.NewReader(input), func(eventType, data string) {
 			events = append(events, struct{ typ, data string }{eventType, data})
 		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 
 		if len(events) != 4 {
 			t.Fatalf("got %d events, want 4", len(events))
