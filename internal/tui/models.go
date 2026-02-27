@@ -18,20 +18,41 @@ type modelsTab struct {
 func newModelsTab(cfg config.Config) modelsTab {
 	return modelsTab{
 		cfg:       cfg,
-		providers: config.Providers(),
+		providers: cfg.AllProviders(),
 	}
 }
 
 func (t modelsTab) currentModel() string {
-	switch t.providers[t.cursor] {
+	p := t.providers[t.cursor]
+	switch p {
 	case "anthropic":
 		return t.cfg.Anthropic.Model
 	case "openai":
 		return t.cfg.OpenAI.Model
 	case "ollama":
 		return t.cfg.Ollama.Model
+	default:
+		if custom, ok := t.cfg.Custom[p]; ok {
+			return custom.Model
+		}
+		return ""
 	}
-	return ""
+}
+
+func (t modelsTab) modelForProvider(p string) string {
+	switch p {
+	case "anthropic":
+		return t.cfg.Anthropic.Model
+	case "openai":
+		return t.cfg.OpenAI.Model
+	case "ollama":
+		return t.cfg.Ollama.Model
+	default:
+		if custom, ok := t.cfg.Custom[p]; ok {
+			return custom.Model
+		}
+		return ""
+	}
 }
 
 func (t modelsTab) view() string {
@@ -40,15 +61,7 @@ func (t modelsTab) view() string {
 	b.WriteString("\n\n")
 
 	for i, p := range t.providers {
-		var model string
-		switch p {
-		case "anthropic":
-			model = t.cfg.Anthropic.Model
-		case "openai":
-			model = t.cfg.OpenAI.Model
-		case "ollama":
-			model = t.cfg.Ollama.Model
-		}
+		model := t.modelForProvider(p)
 
 		cursor := "    "
 		if i == t.cursor {

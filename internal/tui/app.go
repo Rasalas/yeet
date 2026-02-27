@@ -27,7 +27,7 @@ func initialModel() model {
 		cfg:         cfg,
 		providerTab: newProviderTab(cfg),
 		modelsTab:   newModelsTab(cfg),
-		keysTab:     newKeysTab(),
+		keysTab:     newKeysTab(cfg),
 	}
 }
 
@@ -113,13 +113,21 @@ func (m model) updateModels(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case "enter":
 			m.modelsTab.editing = false
 			newModel := m.modelsTab.editBuf
-			switch m.modelsTab.providers[m.modelsTab.cursor] {
+			provider := m.modelsTab.providers[m.modelsTab.cursor]
+			switch provider {
 			case "anthropic":
 				m.cfg.Anthropic.Model = newModel
 			case "openai":
 				m.cfg.OpenAI.Model = newModel
 			case "ollama":
 				m.cfg.Ollama.Model = newModel
+			default:
+				if m.cfg.Custom != nil {
+					if custom, ok := m.cfg.Custom[provider]; ok {
+						custom.Model = newModel
+						m.cfg.Custom[provider] = custom
+					}
+				}
 			}
 			m.modelsTab.cfg = m.cfg
 			config.Save(m.cfg)
@@ -165,7 +173,7 @@ func (m model) updateKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					m.keysTab.message = styleDanger.Render(fmt.Sprintf("Failed to save: %v", err))
 				} else {
 					m.keysTab.message = styleSuccess.Render(fmt.Sprintf("✓ Key saved for %s", provider))
-					m.keysTab.status[provider] = true
+					m.keysTab.status[provider] = keyring.KeyInfo{Found: true, Source: keyring.SourceKeyring}
 				}
 			}
 			m.keysTab.editBuf = ""
@@ -203,7 +211,7 @@ func (m model) updateKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.keysTab.message = styleDanger.Render(fmt.Sprintf("Failed to delete: %v", err))
 		} else {
 			m.keysTab.message = styleSuccess.Render(fmt.Sprintf("✓ Key deleted for %s", provider))
-			m.keysTab.status[provider] = false
+			m.keysTab.status[provider] = keyring.KeyInfo{Found: false, Source: keyring.SourceNone}
 		}
 	}
 	return m, nil

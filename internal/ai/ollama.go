@@ -29,10 +29,12 @@ type ollamaResponse struct {
 	Message struct {
 		Content string `json:"content"`
 	} `json:"message"`
-	Error string `json:"error,omitempty"`
+	PromptEvalCount int    `json:"prompt_eval_count"`
+	EvalCount       int    `json:"eval_count"`
+	Error           string `json:"error,omitempty"`
 }
 
-func (p *OllamaProvider) GenerateCommitMessage(ctx CommitContext) (string, error) {
+func (p *OllamaProvider) GenerateCommitMessage(ctx CommitContext) (string, Usage, error) {
 	body := ollamaRequest{
 		Model: p.Model,
 		Messages: []ollamaMessage{
@@ -44,35 +46,41 @@ func (p *OllamaProvider) GenerateCommitMessage(ctx CommitContext) (string, error
 
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
-		return "", fmt.Errorf("failed to marshal request: %w", err)
+		return "", Usage{}, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
 	url := strings.TrimRight(p.URL, "/") + "/api/chat"
 	req, err := http.NewRequest("POST", url, bytes.NewReader(jsonBody))
 	if err != nil {
-		return "", err
+		return "", Usage{}, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("API request failed (is Ollama running at %s?): %w", p.URL, err)
+		return "", Usage{}, fmt.Errorf("API request failed (is Ollama running at %s?): %w", p.URL, err)
 	}
 	defer resp.Body.Close()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", fmt.Errorf("failed to read response: %w", err)
+		return "", Usage{}, fmt.Errorf("failed to read response: %w", err)
 	}
 
 	var result ollamaResponse
 	if err := json.Unmarshal(respBody, &result); err != nil {
-		return "", fmt.Errorf("failed to parse response: %w", err)
+		return "", Usage{}, fmt.Errorf("failed to parse response: %w", err)
 	}
 
 	if result.Error != "" {
-		return "", fmt.Errorf("Ollama error: %s", result.Error)
+		return "", Usage{}, fmt.Errorf("Ollama error: %s", result.Error)
 	}
 
-	return strings.TrimSpace(result.Message.Content), nil
+	usage := Usage{
+		Model:        p.Model,
+		InputTokens:  result.PromptEvalCount,
+		OutputTokens: result.EvalCount,
+	}
+
+	return strings.TrimSpace(result.Message.Content), usage, nil
 }

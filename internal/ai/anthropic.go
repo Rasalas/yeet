@@ -30,12 +30,16 @@ type anthropicResponse struct {
 	Content []struct {
 		Text string `json:"text"`
 	} `json:"content"`
+	Usage *struct {
+		InputTokens  int `json:"input_tokens"`
+		OutputTokens int `json:"output_tokens"`
+	} `json:"usage"`
 	Error *struct {
 		Message string `json:"message"`
 	} `json:"error"`
 }
 
-func (p *AnthropicProvider) GenerateCommitMessage(ctx CommitContext) (string, error) {
+func (p *AnthropicProvider) GenerateCommitMessage(ctx CommitContext) (string, Usage, error) {
 	body := anthropicRequest{
 		Model:     p.Model,
 		MaxTokens: 256,
@@ -47,12 +51,12 @@ func (p *AnthropicProvider) GenerateCommitMessage(ctx CommitContext) (string, er
 
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
-		return "", fmt.Errorf("failed to marshal request: %w", err)
+		return "", Usage{}, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
 	req, err := http.NewRequest("POST", "https://api.anthropic.com/v1/messages", bytes.NewReader(jsonBody))
 	if err != nil {
-		return "", err
+		return "", Usage{}, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("x-api-key", p.APIKey)
@@ -60,27 +64,33 @@ func (p *AnthropicProvider) GenerateCommitMessage(ctx CommitContext) (string, er
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("API request failed: %w", err)
+		return "", Usage{}, fmt.Errorf("API request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", fmt.Errorf("failed to read response: %w", err)
+		return "", Usage{}, fmt.Errorf("failed to read response: %w", err)
 	}
 
 	var result anthropicResponse
 	if err := json.Unmarshal(respBody, &result); err != nil {
-		return "", fmt.Errorf("failed to parse response: %w", err)
+		return "", Usage{}, fmt.Errorf("failed to parse response: %w", err)
 	}
 
 	if result.Error != nil {
-		return "", fmt.Errorf("API error: %s", result.Error.Message)
+		return "", Usage{}, fmt.Errorf("API error: %s", result.Error.Message)
 	}
 
 	if len(result.Content) == 0 {
-		return "", fmt.Errorf("empty response from API")
+		return "", Usage{}, fmt.Errorf("empty response from API")
 	}
 
-	return strings.TrimSpace(result.Content[0].Text), nil
+	usage := Usage{Model: p.Model}
+	if result.Usage != nil {
+		usage.InputTokens = result.Usage.InputTokens
+		usage.OutputTokens = result.Usage.OutputTokens
+	}
+
+	return strings.TrimSpace(result.Content[0].Text), usage, nil
 }

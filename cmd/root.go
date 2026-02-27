@@ -10,6 +10,7 @@ import (
 	"github.com/rasalas/yeet/internal/ai"
 	"github.com/rasalas/yeet/internal/config"
 	"github.com/rasalas/yeet/internal/git"
+	"github.com/rasalas/yeet/internal/keyring"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
@@ -67,48 +68,16 @@ func runYeet(cmd *cobra.Command, args []string) error {
 
 	// 3. Get commit message
 	var message string
+	var usage *ai.Usage
 	if messageFlag != "" {
 		message = messageFlag
 	} else if len(args) > 0 {
 		message = strings.Join(args, " ")
 	} else {
-		fmt.Print("  Generating commit message...")
-
-		diff, err := git.DiffCached()
+		message, usage, err = generateOrFallback()
 		if err != nil {
-			fmt.Println(" failed")
-			return fmt.Errorf("failed to get diff: %w", err)
-		}
-
-		branch, _ := git.CurrentBranch()
-		recentLog, _ := git.LogOneline()
-		status, _ := git.StatusShort()
-
-		cfg, err := config.Load()
-		if err != nil {
-			fmt.Println(" failed")
-			return fmt.Errorf("failed to load config: %w", err)
-		}
-
-		provider, err := ai.NewProvider(cfg)
-		if err != nil {
-			fmt.Println(" failed")
 			return err
 		}
-
-		ctx := ai.CommitContext{
-			Diff:          diff,
-			Branch:        branch,
-			RecentCommits: recentLog,
-			Status:        status,
-		}
-
-		message, err = provider.GenerateCommitMessage(ctx)
-		if err != nil {
-			fmt.Println(" failed")
-			return fmt.Errorf("AI generation failed: %w", err)
-		}
-		fmt.Print("\r\033[K") // clear the "Generating..." line
 	}
 
 	// 4. Confirm loop (show message, allow edit)
@@ -177,7 +146,143 @@ func runYeet(cmd *cobra.Command, args []string) error {
 	branch, _ := git.CurrentBranch()
 	fmt.Printf("  Pushed to origin/%s.\n", branch)
 
+	if usage != nil && usage.InputTokens > 0 {
+		costLine := fmt.Sprintf("  %s · %s", usage.FormatTokens(), usage.Model)
+		if cost, ok := usage.Cost(); ok {
+			costLine = fmt.Sprintf("  %s · %s · %s", cost, usage.FormatTokens(), usage.Model)
+		}
+		fmt.Println(costLine)
+	}
+
 	return nil
+}
+
+func generateOrFallback() (string, *ai.Usage, error) {
+	cfg, err := config.Load()
+	if err != nil {
+		cfg = config.DefaultConfig()
+	}
+
+	provider, providerErr := ai.NewProvider(cfg)
+
+	// No provider available — offer quick setup or manual input
+	if providerErr != nil {
+		fmt.Printf("  No API key found for %s.\n\n", cfg.Provider)
+		fmt.Println("  Set up AI now? (y/n)")
+
+		yes, err := waitForYesNo()
+		if err != nil {
+			return "", nil, err
+		}
+
+		if yes {
+			if err := quickSetup(cfg); err != nil {
+				fmt.Printf("  Setup failed: %v\n\n", err)
+			} else {
+				// Retry with new key
+				provider, providerErr = ai.NewProvider(cfg)
+			}
+		}
+
+		// Still no provider — fall back to manual input
+		if providerErr != nil {
+			fmt.Println("  Enter commit message:")
+			msg, err := editLine("")
+			if err != nil {
+				return "", nil, err
+			}
+			fmt.Println()
+			if msg == "" {
+				return "", nil, fmt.Errorf("empty commit message")
+			}
+			fmt.Printf("\n  tip: run `yeet auth set %s` to enable AI commit messages\n\n", cfg.Provider)
+			return msg, nil, nil
+		}
+	}
+
+	// AI generation
+	fmt.Print("  Generating commit message...")
+
+	diff, err := git.DiffCached()
+	if err != nil {
+		fmt.Println(" failed")
+		return "", nil, fmt.Errorf("failed to get diff: %w", err)
+	}
+
+	branch, _ := git.CurrentBranch()
+	recentLog, _ := git.LogOneline()
+	status, _ := git.StatusShort()
+
+	ctx := ai.CommitContext{
+		Diff:          diff,
+		Branch:        branch,
+		RecentCommits: recentLog,
+		Status:        status,
+	}
+
+	message, usage, err := provider.GenerateCommitMessage(ctx)
+	if err != nil {
+		// AI failed at runtime — fall back to manual
+		fmt.Println(" failed")
+		fmt.Printf("  %v\n\n", err)
+		fmt.Println("  Enter commit message manually:")
+		msg, editErr := editLine("")
+		if editErr != nil {
+			return "", nil, editErr
+		}
+		fmt.Println()
+		if msg == "" {
+			return "", nil, fmt.Errorf("empty commit message")
+		}
+		return msg, nil, nil
+	}
+
+	fmt.Print("\r\033[K") // clear the "Generating..." line
+	return message, &usage, nil
+}
+
+func quickSetup(cfg config.Config) error {
+	fmt.Printf("\n  Enter API key for %s: ", cfg.Provider)
+	key, err := term.ReadPassword(int(os.Stdin.Fd()))
+	fmt.Println()
+	if err != nil {
+		return fmt.Errorf("failed to read key: %w", err)
+	}
+
+	apiKey := strings.TrimSpace(string(key))
+	if apiKey == "" {
+		return fmt.Errorf("empty key")
+	}
+
+	if err := keyring.Set(cfg.Provider, apiKey); err != nil {
+		return fmt.Errorf("failed to save key: %w", err)
+	}
+
+	fmt.Printf("  ✓ Key saved for %s.\n\n", cfg.Provider)
+	return nil
+}
+
+func waitForYesNo() (bool, error) {
+	fd := int(os.Stdin.Fd())
+	oldState, err := term.MakeRaw(fd)
+	if err != nil {
+		return false, err
+	}
+	defer term.Restore(fd, oldState)
+
+	buf := make([]byte, 1)
+	for {
+		_, err := os.Stdin.Read(buf)
+		if err != nil {
+			return false, err
+		}
+		switch buf[0] {
+		case 'y', 'Y', 13, 10: // y or Enter
+			return true, nil
+		case 'n', 'N', 27, 3: // n, Esc, Ctrl+C
+			return false, nil
+		}
+	}
 }
 
 type action int

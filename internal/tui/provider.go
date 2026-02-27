@@ -14,7 +14,7 @@ type providerTab struct {
 }
 
 func newProviderTab(cfg config.Config) providerTab {
-	providers := config.Providers()
+	providers := append([]string{"auto"}, cfg.AllProviders()...)
 	cursor := 0
 	for i, p := range providers {
 		if p == cfg.Provider {
@@ -30,6 +30,7 @@ func newProviderTab(cfg config.Config) providerTab {
 }
 
 var providerLabels = map[string]string{
+	"auto":      "Auto (cheapest available)",
 	"anthropic": "Anthropic Claude",
 	"openai":    "OpenAI",
 	"ollama":    "Ollama (local)",

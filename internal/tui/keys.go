@@ -10,17 +10,18 @@ import (
 
 type keysTab struct {
 	providers []string
-	status    map[string]bool
+	status    map[string]keyring.KeyInfo
 	cursor    int
 	editing   bool
 	editBuf   string
 	message   string
 }
 
-func newKeysTab() keysTab {
+func newKeysTab(cfg config.Config) keysTab {
+	providers := cfg.AllProviders()
 	return keysTab{
-		providers: config.Providers(),
-		status:    keyring.Status(),
+		providers: providers,
+		status:    keyring.Status(providers, cfg.CustomEnvs()),
 	}
 }
 
@@ -35,9 +36,12 @@ func (t keysTab) view() string {
 			cursor = "  > "
 		}
 
+		info := t.status[p]
 		icon := styleDanger.Render("✗")
-		if t.status[p] {
+		source := ""
+		if info.Found {
 			icon = styleSuccess.Render("✓")
+			source = styleHelp.Render(fmt.Sprintf(" (%s)", info.Source))
 		}
 
 		label := providerLabels[p]
@@ -53,6 +57,7 @@ func (t keysTab) view() string {
 				style = styleSelected
 			}
 			b.WriteString(style.Render(fmt.Sprintf("%s%s  %s", cursor, icon, label)))
+			b.WriteString(source)
 			b.WriteString("\n")
 		}
 	}

@@ -10,8 +10,9 @@ import (
 )
 
 type OpenAIProvider struct {
-	APIKey string
-	Model  string
+	APIKey  string
+	Model   string
+	BaseURL string
 }
 
 type openaiRequest struct {
@@ -30,12 +31,16 @@ type openaiResponse struct {
 			Content string `json:"content"`
 		} `json:"message"`
 	} `json:"choices"`
+	Usage *struct {
+		PromptTokens     int `json:"prompt_tokens"`
+		CompletionTokens int `json:"completion_tokens"`
+	} `json:"usage"`
 	Error *struct {
 		Message string `json:"message"`
 	} `json:"error"`
 }
 
-func (p *OpenAIProvider) GenerateCommitMessage(ctx CommitContext) (string, error) {
+func (p *OpenAIProvider) GenerateCommitMessage(ctx CommitContext) (string, Usage, error) {
 	body := openaiRequest{
 		Model: p.Model,
 		Messages: []openaiMessage{
@@ -46,39 +51,50 @@ func (p *OpenAIProvider) GenerateCommitMessage(ctx CommitContext) (string, error
 
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
-		return "", fmt.Errorf("failed to marshal request: %w", err)
+		return "", Usage{}, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	req, err := http.NewRequest("POST", "https://api.openai.com/v1/chat/completions", bytes.NewReader(jsonBody))
+	baseURL := p.BaseURL
+	if baseURL == "" {
+		baseURL = "https://api.openai.com/v1"
+	}
+
+	req, err := http.NewRequest("POST", strings.TrimRight(baseURL, "/")+"/chat/completions", bytes.NewReader(jsonBody))
 	if err != nil {
-		return "", err
+		return "", Usage{}, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+p.APIKey)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("API request failed: %w", err)
+		return "", Usage{}, fmt.Errorf("API request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", fmt.Errorf("failed to read response: %w", err)
+		return "", Usage{}, fmt.Errorf("failed to read response: %w", err)
 	}
 
 	var result openaiResponse
 	if err := json.Unmarshal(respBody, &result); err != nil {
-		return "", fmt.Errorf("failed to parse response: %w", err)
+		return "", Usage{}, fmt.Errorf("failed to parse response: %w", err)
 	}
 
 	if result.Error != nil {
-		return "", fmt.Errorf("API error: %s", result.Error.Message)
+		return "", Usage{}, fmt.Errorf("API error: %s", result.Error.Message)
 	}
 
 	if len(result.Choices) == 0 {
-		return "", fmt.Errorf("empty response from API")
+		return "", Usage{}, fmt.Errorf("empty response from API")
 	}
 
-	return strings.TrimSpace(result.Choices[0].Message.Content), nil
+	usage := Usage{Model: p.Model}
+	if result.Usage != nil {
+		usage.InputTokens = result.Usage.PromptTokens
+		usage.OutputTokens = result.Usage.CompletionTokens
+	}
+
+	return strings.TrimSpace(result.Choices[0].Message.Content), usage, nil
 }
