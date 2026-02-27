@@ -228,7 +228,7 @@ func runYeet(cmd *cobra.Command, args []string) error {
 		if cost, ok := usage.Cost(); ok {
 			costLine = fmt.Sprintf("%s · %s · %s", cost, usage.FormatTokens(), usage.Model)
 		}
-		fmt.Printf("  %s%s%s\n", dim, costLine, reset)
+		fmt.Printf("\n  %s%s%s\n", dim, costLine, reset)
 	}
 
 	return nil
