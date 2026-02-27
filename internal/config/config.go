@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -9,9 +10,6 @@ import (
 	"github.com/rasalas/yeet/internal/keyring"
 	"github.com/rasalas/yeet/internal/xdg"
 )
-
-// DefaultOllamaURL is the default Ollama API endpoint.
-const DefaultOllamaURL = "http://localhost:11434"
 
 type ProviderConfig struct {
 	Model string `toml:"model,omitempty"`
@@ -25,21 +23,12 @@ type PricingOverride struct {
 }
 
 type Config struct {
-	Provider  string                       `toml:"provider"`
-	Anthropic ProviderConfig               `toml:"anthropic"`
-	OpenAI    ProviderConfig               `toml:"openai"`
-	Ollama    ProviderConfig               `toml:"ollama"`
-	Custom    map[string]ProviderConfig    `toml:"custom"`
-	Pricing   map[string]PricingOverride   `toml:"pricing"`
-}
-
-// WellKnown provides defaults for providers yeet recognizes but doesn't have
-// builtin support for. They all use the OpenAI Chat Completions format.
-var WellKnown = map[string]ProviderConfig{
-	"google":     {Model: "gemini-3-flash-preview", URL: "https://generativelanguage.googleapis.com/v1beta/openai", Env: "GOOGLE_API_KEY"},
-	"groq":       {Model: "llama-3.3-70b-versatile", URL: "https://api.groq.com/openai/v1", Env: "GROQ_API_KEY"},
-	"openrouter": {Model: "openrouter/auto", URL: "https://openrouter.ai/api/v1", Env: "OPENROUTER_API_KEY"},
-	"mistral":    {Model: "mistral-small-latest", URL: "https://api.mistral.ai/v1", Env: "MISTRAL_API_KEY"},
+	Provider  string                     `toml:"provider"`
+	Anthropic ProviderConfig             `toml:"anthropic"`
+	OpenAI    ProviderConfig             `toml:"openai"`
+	Ollama    ProviderConfig             `toml:"ollama"`
+	Custom    map[string]ProviderConfig  `toml:"custom"`
+	Pricing   map[string]PricingOverride `toml:"pricing"`
 }
 
 // KnownModels lists available models per provider for the TUI picker.
@@ -56,9 +45,9 @@ var KnownModels = map[string][]string{
 func DefaultConfig() Config {
 	return Config{
 		Provider:  "auto",
-		Anthropic: ProviderConfig{Model: "claude-haiku-4-5-20251001"},
-		OpenAI:    ProviderConfig{Model: "gpt-4o-mini"},
-		Ollama:    ProviderConfig{Model: "llama3", URL: DefaultOllamaURL},
+		Anthropic: ProviderConfig{Model: Registry["anthropic"].DefaultModel},
+		OpenAI:    ProviderConfig{Model: Registry["openai"].DefaultModel},
+		Ollama:    ProviderConfig{Model: Registry["ollama"].DefaultModel, URL: Registry["ollama"].DefaultURL},
 	}
 }
 
@@ -107,16 +96,26 @@ func Save(cfg Config) error {
 	}
 
 	// Don't persist models that match defaults — they'll auto-update with new versions.
-	d := DefaultConfig()
 	out := cfg
-	if out.Anthropic.Model == d.Anthropic.Model {
-		out.Anthropic.Model = ""
-	}
-	if out.OpenAI.Model == d.OpenAI.Model {
-		out.OpenAI.Model = ""
-	}
-	if out.Ollama.Model == d.Ollama.Model {
-		out.Ollama.Model = ""
+	for _, name := range Providers() {
+		entry, ok := Registry[name]
+		if !ok {
+			continue
+		}
+		switch name {
+		case "anthropic":
+			if out.Anthropic.Model == entry.DefaultModel {
+				out.Anthropic.Model = ""
+			}
+		case "openai":
+			if out.OpenAI.Model == entry.DefaultModel {
+				out.OpenAI.Model = ""
+			}
+		case "ollama":
+			if out.Ollama.Model == entry.DefaultModel {
+				out.Ollama.Model = ""
+			}
+		}
 	}
 
 	f, err := os.Create(path)
@@ -147,6 +146,12 @@ func (c Config) AllProviders() []string {
 			seen[name] = true
 		}
 	}
+	for name := range Registry {
+		if !seen[name] {
+			extra = append(extra, name)
+			seen[name] = true
+		}
+	}
 	for _, name := range keyring.OpenCodeProviders() {
 		if !seen[name] {
 			extra = append(extra, name)
@@ -158,55 +163,162 @@ func (c Config) AllProviders() []string {
 	return append(builtin, extra...)
 }
 
-// DefaultModel returns the default model for a builtin or well-known provider.
+// DefaultModel returns the default model for a known provider.
 func DefaultModel(provider string) string {
-	d := DefaultConfig()
-	switch provider {
-	case "anthropic":
-		return d.Anthropic.Model
-	case "openai":
-		return d.OpenAI.Model
-	case "ollama":
-		return d.Ollama.Model
-	}
-	if wk, ok := WellKnown[provider]; ok {
-		return wk.Model
+	if entry, ok := Registry[provider]; ok {
+		return entry.DefaultModel
 	}
 	return ""
 }
 
-// ResolveProvider returns the effective config for a non-builtin provider.
-// Priority: user's [custom.X] config > WellKnown defaults.
-// Fields are merged: user-set fields override, empty fields fall back to WellKnown.
-func (c Config) ResolveProvider(name string) (ProviderConfig, bool) {
+// ResolveProviderFull returns the fully-resolved provider configuration.
+// Three-layer merge: Registry defaults → named struct fields (builtins) → Custom overrides.
+// Purely custom providers (not in Registry) default to ProtocolOpenAI + NeedsAuth.
+func (c Config) ResolveProviderFull(name string) (ResolvedProvider, bool) {
+	entry, inRegistry := Registry[name]
 	custom, hasCustom := c.Custom[name]
-	wk, hasWK := WellKnown[name]
-	if !hasCustom && !hasWK {
-		return ProviderConfig{}, false
+
+	// Start from registry defaults
+	rp := ResolvedProvider{
+		Name:      name,
+		Model:     entry.DefaultModel,
+		URL:       entry.DefaultURL,
+		Env:       entry.DefaultEnv,
+		Protocol:  entry.Protocol,
+		NeedsAuth: entry.NeedsAuth,
 	}
-	// Start with well-known defaults, override with user config
-	pc := wk
+
+	// Layer 2: named struct fields for builtins
+	switch name {
+	case "anthropic":
+		if c.Anthropic.Model != "" {
+			rp.Model = c.Anthropic.Model
+		}
+		if c.Anthropic.URL != "" {
+			rp.URL = c.Anthropic.URL
+		}
+		if c.Anthropic.Env != "" {
+			rp.Env = c.Anthropic.Env
+		}
+	case "openai":
+		if c.OpenAI.Model != "" {
+			rp.Model = c.OpenAI.Model
+		}
+		if c.OpenAI.URL != "" {
+			rp.URL = c.OpenAI.URL
+		}
+		if c.OpenAI.Env != "" {
+			rp.Env = c.OpenAI.Env
+		}
+	case "ollama":
+		if c.Ollama.Model != "" {
+			rp.Model = c.Ollama.Model
+		}
+		if c.Ollama.URL != "" {
+			rp.URL = c.Ollama.URL
+		}
+		if c.Ollama.Env != "" {
+			rp.Env = c.Ollama.Env
+		}
+	}
+
+	// Layer 3: Custom overrides (covers well-known overrides + purely custom)
 	if hasCustom {
 		if custom.Model != "" {
-			pc.Model = custom.Model
+			rp.Model = custom.Model
 		}
 		if custom.URL != "" {
-			pc.URL = custom.URL
+			rp.URL = custom.URL
 		}
 		if custom.Env != "" {
-			pc.Env = custom.Env
+			rp.Env = custom.Env
 		}
 	}
-	return pc, true
+
+	// Purely custom provider not in registry
+	if !inRegistry && !hasCustom {
+		return ResolvedProvider{}, false
+	}
+	if !inRegistry {
+		rp.Protocol = ProtocolOpenAI
+		rp.NeedsAuth = true
+	}
+
+	return rp, true
 }
 
-// CustomEnvs returns a map of provider name to custom env var name.
-// Includes well-known providers' env vars as fallback.
+// ResolveProvider returns the effective config for a non-builtin provider.
+// Kept for backward compatibility; prefer ResolveProviderFull.
+func (c Config) ResolveProvider(name string) (ProviderConfig, bool) {
+	rp, ok := c.ResolveProviderFull(name)
+	if !ok {
+		return ProviderConfig{}, false
+	}
+	return ProviderConfig{Model: rp.Model, URL: rp.URL, Env: rp.Env}, true
+}
+
+// SetModel writes a model to the appropriate config location.
+func (c *Config) SetModel(provider, model string) {
+	switch provider {
+	case "anthropic":
+		c.Anthropic.Model = model
+	case "openai":
+		c.OpenAI.Model = model
+	case "ollama":
+		c.Ollama.Model = model
+	default:
+		if c.Custom == nil {
+			c.Custom = make(map[string]ProviderConfig)
+		}
+		pc := c.Custom[provider]
+		pc.Model = model
+		// Inherit URL/Env from Registry if not set
+		if entry, ok := Registry[provider]; ok {
+			if pc.URL == "" {
+				pc.URL = entry.DefaultURL
+			}
+			if pc.Env == "" {
+				pc.Env = entry.DefaultEnv
+			}
+		}
+		c.Custom[provider] = pc
+	}
+}
+
+// Validate checks the config for problems and returns all warnings/errors.
+func (c Config) Validate() []string {
+	var problems []string
+
+	if c.Provider != "" && c.Provider != "auto" {
+		if _, ok := Registry[c.Provider]; !ok {
+			if _, ok := c.Custom[c.Provider]; !ok {
+				problems = append(problems, fmt.Sprintf("unknown provider %q — add it to [custom.%s] in config.toml or use a known provider", c.Provider, c.Provider))
+			}
+		}
+	}
+
+	for name, pc := range c.Custom {
+		if _, ok := Registry[name]; ok {
+			continue // registry providers don't need url
+		}
+		if pc.URL == "" {
+			problems = append(problems, fmt.Sprintf("custom provider %q is missing url", name))
+		}
+		if pc.Env == "" {
+			problems = append(problems, fmt.Sprintf("custom provider %q has no env var set (key must be in keyring)", name))
+		}
+	}
+
+	return problems
+}
+
+// CustomEnvs returns a map of provider name to env var name.
+// Includes registry providers' env vars, overridden by custom config.
 func (c Config) CustomEnvs() map[string]string {
 	envs := make(map[string]string)
-	for name, wk := range WellKnown {
-		if wk.Env != "" {
-			envs[name] = wk.Env
+	for name, entry := range Registry {
+		if entry.DefaultEnv != "" {
+			envs[name] = entry.DefaultEnv
 		}
 	}
 	for name, pc := range c.Custom {

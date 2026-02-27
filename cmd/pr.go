@@ -104,6 +104,10 @@ func runPR(cmd *cobra.Command, args []string) error {
 		cfg = config.DefaultConfig()
 	}
 
+	for model, p := range cfg.Pricing {
+		ai.SetPricing(model, p.Input, p.Output)
+	}
+
 	provider, err := ai.NewProvider(cfg)
 	if err != nil {
 		return fmt.Errorf("no AI provider configured: %w", err)

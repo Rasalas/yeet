@@ -114,19 +114,10 @@ func initialModel() model {
 }
 
 func providerModel(cfg config.Config, p string) string {
-	switch p {
-	case "anthropic":
-		return cfg.Anthropic.Model
-	case "openai":
-		return cfg.OpenAI.Model
-	case "ollama":
-		return cfg.Ollama.Model
-	default:
-		if pc, ok := cfg.ResolveProvider(p); ok {
-			return pc.Model
-		}
-		return ""
+	if rp, ok := cfg.ResolveProviderFull(p); ok {
+		return rp.Model
 	}
+	return ""
 }
 
 func (m model) Init() tea.Cmd { return nil }
@@ -339,30 +330,7 @@ func (m *model) updatePicking(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m *model) saveModel(provider, newModel string) error {
-	switch provider {
-	case "anthropic":
-		m.cfg.Anthropic.Model = newModel
-	case "openai":
-		m.cfg.OpenAI.Model = newModel
-	case "ollama":
-		m.cfg.Ollama.Model = newModel
-	default:
-		if m.cfg.Custom == nil {
-			m.cfg.Custom = make(map[string]config.ProviderConfig)
-		}
-		pc := m.cfg.Custom[provider]
-		pc.Model = newModel
-		// Inherit URL/Env from well-known if not set
-		if wk, ok := config.WellKnown[provider]; ok {
-			if pc.URL == "" {
-				pc.URL = wk.URL
-			}
-			if pc.Env == "" {
-				pc.Env = wk.Env
-			}
-		}
-		m.cfg.Custom[provider] = pc
-	}
+	m.cfg.SetModel(provider, newModel)
 	return config.Save(m.cfg)
 }
 
@@ -405,11 +373,14 @@ func (m model) View() string {
 		}
 
 		// Key status (simplified: just ✓ or ✗)
-		if e.name != "auto" && e.name != "ollama" {
-			if e.key.Found {
-				b.WriteString("  " + styleSuccess.Render("✓"))
-			} else {
-				b.WriteString("  " + styleDanger.Render("✗"))
+		if e.name != "auto" {
+			entry, inReg := config.Registry[e.name]
+			if !inReg || entry.NeedsAuth {
+				if e.key.Found {
+					b.WriteString("  " + styleSuccess.Render("✓"))
+				} else {
+					b.WriteString("  " + styleDanger.Render("✗"))
+				}
 			}
 		}
 

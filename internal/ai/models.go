@@ -19,23 +19,29 @@ var modelsClient = &http.Client{Timeout: 5 * time.Second}
 // FetchModels queries the provider's API for available models.
 // Returns a sorted list of model IDs, or an error if the request fails.
 func FetchModels(ctx context.Context, provider string, cfg config.Config) ([]string, error) {
-	switch provider {
-	case "anthropic":
-		return fetchAnthropic(ctx, cfg)
-	case "ollama":
-		return fetchOllama(ctx, cfg)
+	rp, ok := cfg.ResolveProviderFull(provider)
+	if !ok {
+		return nil, fmt.Errorf("unknown provider: %s", provider)
+	}
+
+	switch rp.Protocol {
+	case config.ProtocolAnthropic:
+		return fetchAnthropic(ctx, rp)
+	case config.ProtocolOllama:
+		return fetchOllama(ctx, rp)
 	default:
-		return fetchOpenAICompatible(ctx, provider, cfg)
+		return fetchOpenAICompatible(ctx, rp)
 	}
 }
 
-func fetchAnthropic(ctx context.Context, cfg config.Config) ([]string, error) {
-	key, err := keyring.Get("anthropic")
+func fetchAnthropic(ctx context.Context, rp config.ResolvedProvider) ([]string, error) {
+	key, err := keyring.GetWithEnv(rp.Name, rp.Env)
 	if err != nil {
-		return nil, fmt.Errorf("no API key for anthropic")
+		return nil, fmt.Errorf("no API key for %s", rp.Name)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "GET", "https://api.anthropic.com/v1/models?limit=100", nil)
+	url := strings.TrimRight(rp.URL, "/") + "/models?limit=100"
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -45,12 +51,8 @@ func fetchAnthropic(ctx context.Context, cfg config.Config) ([]string, error) {
 	return doOpenAIModelList(req)
 }
 
-func fetchOllama(ctx context.Context, cfg config.Config) ([]string, error) {
-	url := cfg.Ollama.URL
-	if url == "" {
-		url = config.DefaultOllamaURL
-	}
-	url = strings.TrimRight(url, "/") + "/api/tags"
+func fetchOllama(ctx context.Context, rp config.ResolvedProvider) ([]string, error) {
+	url := strings.TrimRight(rp.URL, "/") + "/api/tags"
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
@@ -87,39 +89,18 @@ func fetchOllama(ctx context.Context, cfg config.Config) ([]string, error) {
 	return models, nil
 }
 
-func fetchOpenAICompatible(ctx context.Context, provider string, cfg config.Config) ([]string, error) {
-	var apiKey, baseURL string
-
-	switch provider {
-	case "openai":
-		key, err := keyring.Get("openai")
-		if err != nil {
-			return nil, fmt.Errorf("no API key for openai")
-		}
-		apiKey = key
-		baseURL = cfg.OpenAI.URL
-		if baseURL == "" {
-			baseURL = "https://api.openai.com/v1"
-		}
-	default:
-		pc, ok := cfg.ResolveProvider(provider)
-		if !ok {
-			return nil, fmt.Errorf("unknown provider: %s", provider)
-		}
-		key, err := keyring.GetWithEnv(provider, pc.Env)
-		if err != nil {
-			return nil, fmt.Errorf("no API key for %s", provider)
-		}
-		apiKey = key
-		baseURL = pc.URL
+func fetchOpenAICompatible(ctx context.Context, rp config.ResolvedProvider) ([]string, error) {
+	key, err := keyring.GetWithEnv(rp.Name, rp.Env)
+	if err != nil {
+		return nil, fmt.Errorf("no API key for %s", rp.Name)
 	}
 
-	url := strings.TrimRight(baseURL, "/") + "/models"
+	url := strings.TrimRight(rp.URL, "/") + "/models"
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Authorization", "Bearer "+apiKey)
+	req.Header.Set("Authorization", "Bearer "+key)
 
 	return doOpenAIModelList(req)
 }

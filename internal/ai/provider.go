@@ -10,37 +10,38 @@ import (
 
 // NewProvider creates the appropriate AI provider based on configuration.
 func NewProvider(cfg config.Config) (Provider, error) {
-	switch cfg.Provider {
-	case "auto":
+	if cfg.Provider == "auto" {
 		return autoSelectProvider(cfg)
-	case "anthropic":
-		key, err := keyring.Get("anthropic")
+	}
+
+	rp, ok := cfg.ResolveProviderFull(cfg.Provider)
+	if !ok {
+		return nil, fmt.Errorf("unknown provider: %s — add it to [custom.%s] in config.toml", cfg.Provider, cfg.Provider)
+	}
+
+	return buildProvider(rp)
+}
+
+func buildProvider(rp config.ResolvedProvider) (Provider, error) {
+	if rp.NeedsAuth {
+		key, err := keyring.GetWithEnv(rp.Name, rp.Env)
 		if err != nil {
-			return nil, fmt.Errorf("anthropic API key not found — run: yeet auth set anthropic")
+			return nil, fmt.Errorf("%s API key not found — run: yeet auth set %s", rp.Name, rp.Name)
 		}
-		return &AnthropicProvider{APIKey: key, Model: cfg.Anthropic.Model}, nil
-	case "openai":
-		key, err := keyring.Get("openai")
-		if err != nil {
-			return nil, fmt.Errorf("openai API key not found — run: yeet auth set openai")
+		switch rp.Protocol {
+		case config.ProtocolAnthropic:
+			return &AnthropicProvider{APIKey: key, Model: rp.Model}, nil
+		default:
+			return &OpenAIProvider{APIKey: key, Model: rp.Model, BaseURL: rp.URL}, nil
 		}
-		return &OpenAIProvider{APIKey: key, Model: cfg.OpenAI.Model, BaseURL: cfg.OpenAI.URL}, nil
-	case "ollama":
-		url := cfg.Ollama.URL
-		if url == "" {
-			url = config.DefaultOllamaURL
-		}
-		return &OllamaProvider{URL: url, Model: cfg.Ollama.Model}, nil
+	}
+
+	// No auth required (e.g. Ollama)
+	switch rp.Protocol {
+	case config.ProtocolOllama:
+		return &OllamaProvider{URL: rp.URL, Model: rp.Model}, nil
 	default:
-		pc, ok := cfg.ResolveProvider(cfg.Provider)
-		if !ok {
-			return nil, fmt.Errorf("unknown provider: %s — add it to [custom.%s] in config.toml", cfg.Provider, cfg.Provider)
-		}
-		key, err := keyring.GetWithEnv(cfg.Provider, pc.Env)
-		if err != nil {
-			return nil, fmt.Errorf("%s API key not found — run: yeet auth set %s", cfg.Provider, cfg.Provider)
-		}
-		return &OpenAIProvider{APIKey: key, Model: pc.Model, BaseURL: pc.URL}, nil
+		return &OpenAIProvider{Model: rp.Model, BaseURL: rp.URL}, nil
 	}
 }
 
@@ -53,48 +54,40 @@ type candidate struct {
 func autoCandidates(cfg config.Config) []candidate {
 	var candidates []candidate
 
-	if key, _ := keyring.Get("anthropic"); key != "" {
-		model := cfg.Anthropic.Model
-		candidates = append(candidates, candidate{
-			model: model,
-			cost:  ModelInputCost(model),
-			builder: func() Provider {
-				return &AnthropicProvider{APIKey: key, Model: model}
-			},
-		})
-	}
-
-	if key, _ := keyring.Get("openai"); key != "" {
-		model, baseURL := cfg.OpenAI.Model, cfg.OpenAI.URL
-		candidates = append(candidates, candidate{
-			model: model,
-			cost:  ModelInputCost(model),
-			builder: func() Provider {
-				return &OpenAIProvider{APIKey: key, Model: model, BaseURL: baseURL}
-			},
-		})
-	}
-
-	seen := map[string]bool{"anthropic": true, "openai": true, "ollama": true}
 	for _, name := range cfg.AllProviders() {
-		if seen[name] {
+		if name == "auto" {
 			continue
 		}
-		seen[name] = true
-		pc, ok := cfg.ResolveProvider(name)
-		if !ok || pc.Model == "" || pc.URL == "" {
+		rp, ok := cfg.ResolveProviderFull(name)
+		if !ok || rp.Model == "" {
 			continue
 		}
-		if key, _ := keyring.GetWithEnv(name, pc.Env); key != "" {
-			model, baseURL := pc.Model, pc.URL
-			candidates = append(candidates, candidate{
-				model: model,
-				cost:  ModelInputCost(model),
-				builder: func() Provider {
+		// Skip Ollama for auto-select (local, no cost info)
+		if rp.Protocol == config.ProtocolOllama {
+			continue
+		}
+		if !rp.NeedsAuth {
+			continue
+		}
+		key, _ := keyring.GetWithEnv(name, rp.Env)
+		if key == "" {
+			continue
+		}
+
+		// Capture for closure
+		model, baseURL, proto := rp.Model, rp.URL, rp.Protocol
+		candidates = append(candidates, candidate{
+			model: model,
+			cost:  ModelInputCost(model),
+			builder: func() Provider {
+				switch proto {
+				case config.ProtocolAnthropic:
+					return &AnthropicProvider{APIKey: key, Model: model}
+				default:
 					return &OpenAIProvider{APIKey: key, Model: model, BaseURL: baseURL}
-				},
-			})
-		}
+				}
+			},
+		})
 	}
 
 	sort.Slice(candidates, func(i, j int) bool {

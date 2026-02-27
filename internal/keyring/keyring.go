@@ -21,12 +21,6 @@ const (
 	SourceNone     KeySource = ""
 )
 
-// Default env var names for builtin providers.
-var envKeys = map[string]string{
-	"anthropic": "ANTHROPIC_API_KEY",
-	"openai":    "OPENAI_API_KEY",
-	"google":    "GOOGLE_API_KEY",
-}
 
 // Set stores a key in the OS keyring.
 func Set(provider, apiKey string) error {
@@ -45,12 +39,8 @@ func Resolve(provider, customEnv string) (string, KeySource) {
 	}
 
 	// 2. Env var
-	envVar := customEnv
-	if envVar == "" {
-		envVar = envKeys[provider]
-	}
-	if envVar != "" {
-		if envKey := os.Getenv(envVar); envKey != "" {
+	if customEnv != "" {
+		if envKey := os.Getenv(customEnv); envKey != "" {
 			return envKey, SourceEnv
 		}
 	}

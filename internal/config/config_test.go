@@ -22,8 +22,8 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.Ollama.Model != "llama3" {
 		t.Errorf("Ollama.Model = %q", cfg.Ollama.Model)
 	}
-	if cfg.Ollama.URL != DefaultOllamaURL {
-		t.Errorf("Ollama.URL = %q, want %q", cfg.Ollama.URL, DefaultOllamaURL)
+	if cfg.Ollama.URL != Registry["ollama"].DefaultURL {
+		t.Errorf("Ollama.URL = %q, want %q", cfg.Ollama.URL, Registry["ollama"].DefaultURL)
 	}
 }
 
@@ -109,6 +109,221 @@ func TestResolveProvider(t *testing.T) {
 	})
 }
 
+func TestResolveProviderFull(t *testing.T) {
+	t.Run("builtin with struct overrides", func(t *testing.T) {
+		cfg := DefaultConfig()
+		cfg.Anthropic.Model = "claude-opus-4-6"
+		rp, ok := cfg.ResolveProviderFull("anthropic")
+		if !ok {
+			t.Fatal("returned false")
+		}
+		if rp.Model != "claude-opus-4-6" {
+			t.Errorf("Model = %q, want \"claude-opus-4-6\"", rp.Model)
+		}
+		if rp.Protocol != ProtocolAnthropic {
+			t.Errorf("Protocol = %q", rp.Protocol)
+		}
+		if !rp.NeedsAuth {
+			t.Error("NeedsAuth should be true")
+		}
+		if rp.URL != "https://api.anthropic.com/v1" {
+			t.Errorf("URL = %q", rp.URL)
+		}
+	})
+
+	t.Run("registry provider without custom", func(t *testing.T) {
+		cfg := DefaultConfig()
+		rp, ok := cfg.ResolveProviderFull("groq")
+		if !ok {
+			t.Fatal("returned false")
+		}
+		if rp.Model != "llama-3.3-70b-versatile" {
+			t.Errorf("Model = %q", rp.Model)
+		}
+		if rp.Protocol != ProtocolOpenAI {
+			t.Errorf("Protocol = %q", rp.Protocol)
+		}
+	})
+
+	t.Run("custom overrides registry", func(t *testing.T) {
+		cfg := DefaultConfig()
+		cfg.Custom = map[string]ProviderConfig{
+			"groq": {Model: "custom-model"},
+		}
+		rp, ok := cfg.ResolveProviderFull("groq")
+		if !ok {
+			t.Fatal("returned false")
+		}
+		if rp.Model != "custom-model" {
+			t.Errorf("Model = %q, want \"custom-model\"", rp.Model)
+		}
+		// URL should fall back to registry
+		if rp.URL != "https://api.groq.com/openai/v1" {
+			t.Errorf("URL = %q", rp.URL)
+		}
+	})
+
+	t.Run("ollama is no-auth", func(t *testing.T) {
+		cfg := DefaultConfig()
+		rp, ok := cfg.ResolveProviderFull("ollama")
+		if !ok {
+			t.Fatal("returned false")
+		}
+		if rp.NeedsAuth {
+			t.Error("NeedsAuth should be false for ollama")
+		}
+		if rp.Protocol != ProtocolOllama {
+			t.Errorf("Protocol = %q", rp.Protocol)
+		}
+	})
+
+	t.Run("purely custom defaults to openai protocol", func(t *testing.T) {
+		cfg := DefaultConfig()
+		cfg.Custom = map[string]ProviderConfig{
+			"together": {Model: "llama-70b", URL: "https://api.together.xyz/v1", Env: "TOGETHER_API_KEY"},
+		}
+		rp, ok := cfg.ResolveProviderFull("together")
+		if !ok {
+			t.Fatal("returned false")
+		}
+		if rp.Protocol != ProtocolOpenAI {
+			t.Errorf("Protocol = %q, want openai", rp.Protocol)
+		}
+		if !rp.NeedsAuth {
+			t.Error("NeedsAuth should be true for custom provider")
+		}
+	})
+
+	t.Run("unknown provider returns false", func(t *testing.T) {
+		cfg := DefaultConfig()
+		_, ok := cfg.ResolveProviderFull("nonexistent")
+		if ok {
+			t.Error("should return false for unknown provider")
+		}
+	})
+}
+
+func TestSetModel(t *testing.T) {
+	t.Run("builtin anthropic", func(t *testing.T) {
+		cfg := DefaultConfig()
+		cfg.SetModel("anthropic", "claude-opus-4-6")
+		if cfg.Anthropic.Model != "claude-opus-4-6" {
+			t.Errorf("Anthropic.Model = %q", cfg.Anthropic.Model)
+		}
+	})
+
+	t.Run("builtin openai", func(t *testing.T) {
+		cfg := DefaultConfig()
+		cfg.SetModel("openai", "gpt-4o")
+		if cfg.OpenAI.Model != "gpt-4o" {
+			t.Errorf("OpenAI.Model = %q", cfg.OpenAI.Model)
+		}
+	})
+
+	t.Run("builtin ollama", func(t *testing.T) {
+		cfg := DefaultConfig()
+		cfg.SetModel("ollama", "mistral")
+		if cfg.Ollama.Model != "mistral" {
+			t.Errorf("Ollama.Model = %q", cfg.Ollama.Model)
+		}
+	})
+
+	t.Run("registry provider goes to custom", func(t *testing.T) {
+		cfg := DefaultConfig()
+		cfg.SetModel("groq", "llama-custom")
+		pc := cfg.Custom["groq"]
+		if pc.Model != "llama-custom" {
+			t.Errorf("Custom[groq].Model = %q", pc.Model)
+		}
+		if pc.URL != "https://api.groq.com/openai/v1" {
+			t.Errorf("Custom[groq].URL = %q", pc.URL)
+		}
+		if pc.Env != "GROQ_API_KEY" {
+			t.Errorf("Custom[groq].Env = %q", pc.Env)
+		}
+	})
+
+	t.Run("purely custom provider", func(t *testing.T) {
+		cfg := DefaultConfig()
+		cfg.SetModel("together", "llama-70b")
+		pc := cfg.Custom["together"]
+		if pc.Model != "llama-70b" {
+			t.Errorf("Custom[together].Model = %q", pc.Model)
+		}
+	})
+}
+
+func TestValidate(t *testing.T) {
+	t.Run("valid config", func(t *testing.T) {
+		cfg := DefaultConfig()
+		cfg.Provider = "anthropic"
+		problems := cfg.Validate()
+		if len(problems) != 0 {
+			t.Errorf("unexpected problems: %v", problems)
+		}
+	})
+
+	t.Run("unknown provider", func(t *testing.T) {
+		cfg := DefaultConfig()
+		cfg.Provider = "nonexistent"
+		problems := cfg.Validate()
+		found := false
+		for _, p := range problems {
+			if strings.Contains(p, "unknown provider") {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("expected unknown provider warning, got: %v", problems)
+		}
+	})
+
+	t.Run("custom missing url", func(t *testing.T) {
+		cfg := DefaultConfig()
+		cfg.Custom = map[string]ProviderConfig{
+			"myapi": {Model: "test", Env: "MY_KEY"},
+		}
+		problems := cfg.Validate()
+		found := false
+		for _, p := range problems {
+			if strings.Contains(p, "missing url") {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("expected missing url warning, got: %v", problems)
+		}
+	})
+
+	t.Run("custom missing env", func(t *testing.T) {
+		cfg := DefaultConfig()
+		cfg.Custom = map[string]ProviderConfig{
+			"myapi": {Model: "test", URL: "https://example.com"},
+		}
+		problems := cfg.Validate()
+		found := false
+		for _, p := range problems {
+			if strings.Contains(p, "no env var") {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("expected missing env warning, got: %v", problems)
+		}
+	})
+
+	t.Run("registry override in custom is fine", func(t *testing.T) {
+		cfg := DefaultConfig()
+		cfg.Custom = map[string]ProviderConfig{
+			"groq": {Model: "custom-model"},
+		}
+		problems := cfg.Validate()
+		if len(problems) != 0 {
+			t.Errorf("unexpected problems for registry override: %v", problems)
+		}
+	})
+}
+
 func TestProviders(t *testing.T) {
 	p := Providers()
 	want := []string{"anthropic", "openai", "ollama"}
@@ -158,9 +373,12 @@ func TestCustomEnvs(t *testing.T) {
 	}
 	envs := cfg.CustomEnvs()
 
-	// Well-known providers should be present
+	// Registry providers should be present
 	if envs["google"] != "GOOGLE_API_KEY" {
 		t.Errorf("google env = %q", envs["google"])
+	}
+	if envs["anthropic"] != "ANTHROPIC_API_KEY" {
+		t.Errorf("anthropic env = %q", envs["anthropic"])
 	}
 	// Custom provider should be present
 	if envs["myapi"] != "MY_API_KEY" {
