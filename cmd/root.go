@@ -84,7 +84,7 @@ func runYeet(cmd *cobra.Command, args []string) error {
 	showMessage := !streamed
 	linesToClear := 3
 	if streamed && term.MsgBg != "" {
-		fmt.Print("\033[1A\033[2K\r")
+		term.ClearLines(1)
 		showMessage = true
 	}
 	for {
@@ -241,7 +241,7 @@ func generateOrFallback() (string, *ai.Usage, bool, error) {
 	if sp, ok := provider.(ai.StreamingProvider); ok {
 		message, usage, err := generateStreaming(sp, ctx)
 		if err != nil {
-			fmt.Print("\r\033[K")
+			term.ClearLine()
 			fmt.Printf("  %s%v%s\n\n", term.Red, err, term.Reset)
 			fmt.Println("  Enter commit message manually:")
 			msg, editErr := term.EditLine(message)
@@ -275,7 +275,7 @@ func generateOrFallback() (string, *ai.Usage, bool, error) {
 		return msg, nil, false, nil
 	}
 
-	fmt.Print("\r\033[K")
+	term.ClearLine()
 	return message, &usage, false, nil
 }
 

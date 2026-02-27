@@ -20,7 +20,6 @@ type Git interface {
 	LogOneline() (string, error)
 	StatusShort() (string, error)
 	CurrentBranch() (string, error)
-	HasRemote() bool
 }
 
 // Default is the package-level Git implementation used by free functions.
@@ -81,11 +80,6 @@ func (ExecGit) StatusShort() (string, error) {
 
 func (ExecGit) CurrentBranch() (string, error) {
 	return run("rev-parse", "--abbrev-ref", "HEAD")
-}
-
-func (ExecGit) HasRemote() bool {
-	out, err := run("remote")
-	return err == nil && strings.TrimSpace(out) != ""
 }
 
 func (ExecGit) PushSetUpstream() (string, error) {
@@ -151,4 +145,3 @@ func LogOneline() (string, error)            { return Default.LogOneline() }
 func HasStagedChanges() bool                 { return Default.HasStagedChanges() }
 func StatusShort() (string, error)           { return Default.StatusShort() }
 func CurrentBranch() (string, error)         { return Default.CurrentBranch() }
-func HasRemote() bool                        { return Default.HasRemote() }

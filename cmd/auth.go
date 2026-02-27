@@ -2,8 +2,8 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 	"strings"
-	"syscall"
 
 	"github.com/rasalas/yeet/internal/config"
 	"github.com/rasalas/yeet/internal/keyring"
@@ -88,7 +88,7 @@ func runAuthSet(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Printf("  Enter API key for %s: ", provider)
-	key, err := goterm.ReadPassword(int(syscall.Stdin))
+	key, err := goterm.ReadPassword(int(os.Stdin.Fd()))
 	fmt.Println()
 	if err != nil {
 		return fmt.Errorf("failed to read key: %w", err)

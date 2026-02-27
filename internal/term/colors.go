@@ -16,7 +16,6 @@ const (
 	HexDanger    = "#FF6B6B"
 	HexWarning   = "#FBBF24"
 	HexText      = "#FEF9F3"
-	HexCardBg    = "#2C241E"
 )
 
 // ANSI color codes — disabled when NO_COLOR is set.
@@ -55,6 +54,11 @@ func Keyhint(key, desc string) string {
 	return Reset + Bold + key + Reset + Dim + " " + desc
 }
 
+// ClearLine clears the current line and returns the cursor to column 0.
+func ClearLine() {
+	fmt.Print("\r\033[K")
+}
+
 // ClearLines clears n lines going upward from the current cursor position.
 func ClearLines(n int) {
 	fmt.Print("\033[2K")
@@ -64,8 +68,8 @@ func ClearLines(n int) {
 	fmt.Print("\r")
 }
 
-// DiffStatRe matches lines like "  file.go | 29 ++---"
-var DiffStatRe = regexp.MustCompile(`^(.*\|[^+-]*?)(\+*)(-*)$`)
+// diffStatRe matches lines like "  file.go | 29 ++---"
+var diffStatRe = regexp.MustCompile(`^(.*\|[^+-]*?)(\+*)(-*)$`)
 
 // ColorizeDiffStat colorizes a single diff stat line.
 func ColorizeDiffStat(line string) string {
@@ -73,7 +77,7 @@ func ColorizeDiffStat(line string) string {
 		return Dim + line + Reset
 	}
 
-	if m := DiffStatRe.FindStringSubmatch(line); m != nil {
+	if m := diffStatRe.FindStringSubmatch(line); m != nil {
 		prefix := m[1]
 		plus := m[2]
 		minus := m[3]
