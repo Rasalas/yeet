@@ -133,58 +133,62 @@ func runPR(cmd *cobra.Command, args []string) error {
 
 	title, body = parsePR(msg)
 
-	// 7. Preview
-	showPRPreview := true
-	linesToClear := 3
-	for {
-		if showPRPreview {
-			linesToClear = displayPRPreview(title, body)
-		} else {
-			showPRPreview = true
-		}
+	// 7. Preview — skip with -y
+	if yesFlag {
+		displayPRPreview(title, body)
+	} else {
+		showPRPreview := true
+		linesToClear := 3
+		for {
+			if showPRPreview {
+				linesToClear = displayPRPreview(title, body)
+			} else {
+				showPRPreview = true
+			}
 
-		fmt.Printf("  %s%s  ·  %s  ·  %s  ·  %s%s\n",
-			term.Dim,
-			term.Keyhint("enter", "create"),
-			term.Keyhint("e", "edit title"),
-			term.Keyhint("E", "editor"),
-			term.Keyhint("q", "cancel"),
-			term.Reset)
+			fmt.Printf("  %s%s  ·  %s  ·  %s  ·  %s%s\n",
+				term.Dim,
+				term.Keyhint("enter", "create"),
+				term.Keyhint("e", "edit title"),
+				term.Keyhint("E", "editor"),
+				term.Keyhint("q", "cancel"),
+				term.Reset)
 
-		action, err := term.WaitForAction()
-		if err != nil {
-			return err
-		}
-
-		switch action {
-		case term.ActionCancel:
-			fmt.Printf("\n  %sCancelled.%s\n", term.Dim, term.Reset)
-			return nil
-
-		case term.ActionEdit:
-			term.ClearLines(linesToClear)
-			edited, err := term.EditLine(title)
+			action, err := term.WaitForAction()
 			if err != nil {
 				return err
 			}
-			title = edited
-			continue
 
-		case term.ActionEditExternal:
-			term.ClearLines(linesToClear)
-			full := title + "\n\n" + body
-			edited, err := term.EditExternal(full)
-			if err != nil {
-				fmt.Printf("\n  Editor failed: %v\n", err)
-			} else {
-				title, body = parsePR(edited)
+			switch action {
+			case term.ActionCancel:
+				fmt.Printf("\n  %sCancelled.%s\n", term.Dim, term.Reset)
+				return nil
+
+			case term.ActionEdit:
+				term.ClearLines(linesToClear)
+				edited, err := term.EditLine(title)
+				if err != nil {
+					return err
+				}
+				title = edited
+				continue
+
+			case term.ActionEditExternal:
+				term.ClearLines(linesToClear)
+				full := title + "\n\n" + body
+				edited, err := term.EditExternal(full)
+				if err != nil {
+					fmt.Printf("\n  Editor failed: %v\n", err)
+				} else {
+					title, body = parsePR(edited)
+				}
+				continue
+
+			case term.ActionConfirm:
+				fmt.Println()
 			}
-			continue
-
-		case term.ActionConfirm:
-			fmt.Println()
+			break
 		}
-		break
 	}
 
 	// 8. Create PR

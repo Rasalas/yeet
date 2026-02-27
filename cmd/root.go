@@ -12,10 +12,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var messageFlag string
+var (
+	messageFlag string
+	yesFlag     bool
+)
 
 func init() {
 	rootCmd.Flags().StringVarP(&messageFlag, "message", "m", "", "Commit message (use when message collides with a subcommand name)")
+	rootCmd.PersistentFlags().BoolVarP(&yesFlag, "yes", "y", false, "Skip confirmation prompts and accept defaults")
 }
 
 var rootCmd = &cobra.Command{
@@ -78,74 +82,72 @@ func runYeet(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// 4. Confirm loop (show message, allow edit)
-	showMessage := !streamed
-	linesToClear := 3
-	if streamed && term.MsgBg != "" {
-		term.ClearLines(1)
-		showMessage = true
-	}
-	for {
-		if showMessage {
-			if term.MsgBg != "" {
-				pad := strings.Repeat(" ", len([]rune(message))+3)
-				fmt.Printf("  %s%s%s\n", term.MsgBar, pad, term.Reset)
-				fmt.Printf("  %s%s%s\n", term.MsgOpen, message, term.MsgClose)
-				fmt.Printf("  %s%s%s\n\n", term.MsgBar, pad, term.Reset)
-				linesToClear = 5
+	// 4. Confirm loop (show message, allow edit) — skip with -y
+	if yesFlag {
+		if streamed && term.MsgBg != "" {
+			term.ClearLines(2)
+		}
+		printMessage(message)
+	} else {
+		showMessage := !streamed
+		linesToClear := 3
+		if streamed && term.MsgBg != "" {
+			term.ClearLines(2)
+			showMessage = true
+		}
+		for {
+			if showMessage {
+				linesToClear = printMessage(message)
 			} else {
-				fmt.Printf("  %s%s%s\n\n", term.MsgOpen, message, term.MsgClose)
+				fmt.Println()
+				showMessage = true
 				linesToClear = 3
 			}
-		} else {
-			fmt.Println()
-			showMessage = true
-			linesToClear = 3
-		}
-		fmt.Printf("  %s%s  \u00b7  %s  \u00b7  %s  \u00b7  %s%s\n",
-			term.Dim,
-			term.Keyhint("enter", "commit"),
-			term.Keyhint("e", "edit"),
-			term.Keyhint("E", "editor"),
-			term.Keyhint("q", "cancel"),
-			term.Reset)
+			fmt.Printf("  %s%s  ·  %s  ·  %s  ·  %s%s\n",
+				term.Dim,
+				term.Keyhint("enter", "commit"),
+				term.Keyhint("e", "edit"),
+				term.Keyhint("E", "editor"),
+				term.Keyhint("q", "cancel"),
+				term.Reset)
 
-		action, err := term.WaitForAction()
-		if err != nil {
-			return err
-		}
-
-		switch action {
-		case term.ActionCancel:
-			fmt.Println()
-			if autoStaged {
-				if err := git.Reset(); err != nil {
-					return fmt.Errorf("failed to unstage changes: %w", err)
-				}
-			}
-			fmt.Printf("  %sCancelled.%s\n", term.Dim, term.Reset)
-			return nil
-		case term.ActionEdit:
-			term.ClearLines(linesToClear)
-			edited, err := term.EditLine(message)
+			action, err := term.WaitForAction()
 			if err != nil {
 				return err
 			}
-			message = edited
-			continue
-		case term.ActionEditExternal:
-			term.ClearLines(linesToClear)
-			edited, err := term.EditExternal(message)
-			if err != nil {
-				fmt.Printf("\n  Editor failed: %v\n", err)
-			} else {
+
+			switch action {
+			case term.ActionCancel:
+				fmt.Println()
+				if autoStaged {
+					if err := git.Reset(); err != nil {
+						return fmt.Errorf("failed to unstage changes: %w", err)
+					}
+				}
+				fmt.Printf("  %sCancelled.%s\n", term.Dim, term.Reset)
+				return nil
+			case term.ActionEdit:
+				term.ClearLines(linesToClear)
+				edited, err := term.EditLine(message)
+				if err != nil {
+					return err
+				}
 				message = edited
+				continue
+			case term.ActionEditExternal:
+				term.ClearLines(linesToClear)
+				edited, err := term.EditExternal(message)
+				if err != nil {
+					fmt.Printf("\n  Editor failed: %v\n", err)
+				} else {
+					message = edited
+				}
+				continue
+			case term.ActionConfirm:
+				fmt.Println()
 			}
-			continue
-		case term.ActionConfirm:
-			fmt.Println()
+			break
 		}
-		break
 	}
 
 	// 6. Commit
@@ -153,7 +155,7 @@ func runYeet(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("commit failed: %s", out)
 	}
-	fmt.Printf("  %s\u2713%s %s\n", term.Green, term.Reset, firstLine(out))
+	fmt.Printf("  %s✓%s %s\n", term.Green, term.Reset, firstLine(out))
 
 	// 7. Push
 	pushOut, err := git.Push()
@@ -165,17 +167,30 @@ func runYeet(cmd *cobra.Command, args []string) error {
 	}
 
 	branch, _ := git.CurrentBranch()
-	fmt.Printf("  %s\u2713%s %spushed to%s origin/%s\n", term.Green, term.Reset, term.Dim, term.Reset, branch)
+	fmt.Printf("  %s✓%s %spushed to%s origin/%s\n", term.Green, term.Reset, term.Dim, term.Reset, branch)
 
 	if usage != nil && usage.InputTokens > 0 {
-		costLine := fmt.Sprintf("%s \u00b7 %s", usage.FormatTokens(), usage.Model)
+		costLine := fmt.Sprintf("%s · %s", usage.FormatTokens(), usage.Model)
 		if cost, ok := usage.Cost(); ok {
-			costLine = fmt.Sprintf("%s \u00b7 %s \u00b7 %s", cost, usage.FormatTokens(), usage.Model)
+			costLine = fmt.Sprintf("%s · %s · %s", cost, usage.FormatTokens(), usage.Model)
 		}
 		fmt.Printf("\n  %s%s%s\n\n", term.Dim, costLine, term.Reset)
 	}
 
 	return nil
+}
+
+// printMessage displays the commit message card and returns the number of lines used.
+func printMessage(message string) int {
+	if term.MsgBg != "" {
+		pad := strings.Repeat(" ", len([]rune(message))+3)
+		fmt.Printf("  %s%s%s\n", term.MsgBar, pad, term.Reset)
+		fmt.Printf("  %s%s%s\n", term.MsgOpen, message, term.MsgClose)
+		fmt.Printf("  %s%s%s\n\n", term.MsgBar, pad, term.Reset)
+		return 5
+	}
+	fmt.Printf("  %s%s%s\n\n", term.MsgOpen, message, term.MsgClose)
+	return 3
 }
 
 func generateOrFallback() (string, *ai.Usage, bool, error) {
