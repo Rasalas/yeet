@@ -7,8 +7,9 @@ import (
 
 	"github.com/rasalas/yeet/internal/config"
 	"github.com/rasalas/yeet/internal/keyring"
+	"github.com/rasalas/yeet/internal/term"
 	"github.com/spf13/cobra"
-	"golang.org/x/term"
+	goterm "golang.org/x/term"
 )
 
 var authCmd = &cobra.Command{
@@ -62,18 +63,18 @@ func runAuthStatus(cmd *cobra.Command, args []string) error {
 	providers := cfg.AllProviders()
 	status := keyring.Status(providers, cfg.CustomEnvs())
 
-	fmt.Printf("\n  %sAPI Keys%s\n\n", bold, reset)
+	fmt.Printf("\n  %sAPI Keys%s\n\n", term.Bold, term.Reset)
 	for _, p := range providers {
 		info := status[p]
 		if info.Found {
 			source := string(info.Source)
-			line := fmt.Sprintf("  %s✓%s  %-16s%s%s%s", green, reset, p, dim, source, reset)
+			line := fmt.Sprintf("  %s\u2713%s  %-16s%s%s%s", term.Green, term.Reset, p, term.Dim, source, term.Reset)
 			if info.Source != keyring.SourceKeyring {
-				line += fmt.Sprintf("  %s← yeet auth import %s%s", dim, p, reset)
+				line += fmt.Sprintf("  %s\u2190 yeet auth import %s%s", term.Dim, p, term.Reset)
 			}
 			fmt.Println(line)
 		} else {
-			fmt.Printf("  %s✗%s  %s\n", red, reset, p)
+			fmt.Printf("  %s\u2717%s  %s\n", term.Red, term.Reset, p)
 		}
 	}
 	fmt.Println()
@@ -87,7 +88,7 @@ func runAuthSet(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Printf("  Enter API key for %s: ", provider)
-	key, err := term.ReadPassword(int(syscall.Stdin))
+	key, err := goterm.ReadPassword(int(syscall.Stdin))
 	fmt.Println()
 	if err != nil {
 		return fmt.Errorf("failed to read key: %w", err)
@@ -102,7 +103,7 @@ func runAuthSet(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to save key: %w", err)
 	}
 
-	fmt.Printf("  %s✓%s API key for %s saved to keyring.\n", green, reset, provider)
+	fmt.Printf("  %s\u2713%s API key for %s saved to keyring.\n", term.Green, term.Reset, provider)
 	return nil
 }
 
@@ -116,7 +117,7 @@ func runAuthDelete(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to delete key: %w", err)
 	}
 
-	fmt.Printf("  %s✓%s API key for %s removed from keyring.\n", green, reset, provider)
+	fmt.Printf("  %s\u2713%s API key for %s removed from keyring.\n", term.Green, term.Reset, provider)
 	return nil
 }
 
@@ -140,26 +141,26 @@ func runAuthImport(cmd *cobra.Command, args []string) error {
 		key, source := keyring.Resolve(p, envs[p])
 		if key == "" {
 			if len(args) == 1 {
-				fmt.Printf("  %s✗%s %s: no key found to import\n", red, reset, p)
+				fmt.Printf("  %s\u2717%s %s: no key found to import\n", term.Red, term.Reset, p)
 			}
 			continue
 		}
 		if source == keyring.SourceKeyring {
 			if len(args) == 1 {
-				fmt.Printf("  %s·%s %s: already in keyring\n", dim, reset, p)
+				fmt.Printf("  %s\u00b7%s %s: already in keyring\n", term.Dim, term.Reset, p)
 			}
 			continue
 		}
 		if err := keyring.Set(p, key); err != nil {
-			fmt.Printf("  %s✗%s %s: failed to import: %v\n", red, reset, p, err)
+			fmt.Printf("  %s\u2717%s %s: failed to import: %v\n", term.Red, term.Reset, p, err)
 			continue
 		}
-		fmt.Printf("  %s✓%s %s: imported from %s to keyring\n", green, reset, p, source)
+		fmt.Printf("  %s\u2713%s %s: imported from %s to keyring\n", term.Green, term.Reset, p, source)
 		imported++
 	}
 
 	if len(args) == 0 && imported == 0 {
-		fmt.Printf("  %sNothing to import.%s\n", dim, reset)
+		fmt.Printf("  %sNothing to import.%s\n", term.Dim, term.Reset)
 	}
 
 	return nil
@@ -171,12 +172,12 @@ func runAuthReset(cmd *cobra.Command, args []string) error {
 	deleted := 0
 	for _, p := range providers {
 		if err := keyring.Delete(p); err == nil {
-			fmt.Printf("  %s✓%s %s removed\n", green, reset, p)
+			fmt.Printf("  %s\u2713%s %s removed\n", term.Green, term.Reset, p)
 			deleted++
 		}
 	}
 	if deleted == 0 {
-		fmt.Printf("  %sNo keys in keyring.%s\n", dim, reset)
+		fmt.Printf("  %sNo keys in keyring.%s\n", term.Dim, term.Reset)
 	}
 	return nil
 }

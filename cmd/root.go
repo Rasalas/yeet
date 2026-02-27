@@ -3,73 +3,22 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"os/exec"
-	"path/filepath"
-	"regexp"
 	"strings"
-	"sync"
-	"time"
 
 	"github.com/rasalas/yeet/internal/ai"
 	"github.com/rasalas/yeet/internal/config"
 	"github.com/rasalas/yeet/internal/git"
 	"github.com/rasalas/yeet/internal/keyring"
+	"github.com/rasalas/yeet/internal/term"
 	"github.com/spf13/cobra"
-	"golang.org/x/term"
+	goterm "golang.org/x/term"
 )
-
-// ANSI color codes — disabled when NO_COLOR is set.
-var (
-	bold   = "\033[1m"
-	dim    = "\033[2m"
-	red    = "\033[31m"
-	green  = "\033[32m"
-	reset  = "\033[0m"
-
-	// Commit message display: colored left bar on warm dark background (no gap).
-	// \033[39m resets only foreground, keeping the bg active.
-	msgBar   = "\033[38;2;255;140;66m\033[48;2;44;36;30m▎\033[39m"                 // mango bar on warm-dark bg, then reset fg
-	msgBg    = "\033[48;2;44;36;30m"                                               // warm dark background only
-	msgOpen  = "\033[38;2;255;140;66m\033[48;2;44;36;30m▎\033[39m\033[1m "          // bar on warm-dark bg + bold + 1 space (▎ counts as 1 char)
-	msgClose = "  \033[0m"                                                         // 2 trailing spaces + full reset
-	msgPad   = 2                                                      // visible trailing chars in msgClose
-)
-
-// keyhint formats a keybinding: key in bold, description in dim.
-func keyhint(key, desc string) string {
-	return reset + bold + key + reset + dim + " " + desc
-}
-
-// clearLines clears n lines going upward from the current cursor position.
-func clearLines(n int) {
-	fmt.Print("\033[2K")
-	for i := 1; i < n; i++ {
-		fmt.Print("\033[1A\033[2K")
-	}
-	fmt.Print("\r")
-}
-
-func init() {
-	if os.Getenv("NO_COLOR") != "" {
-		bold = ""
-		dim = ""
-		red = ""
-		green = ""
-		reset = ""
-		msgBar = ""
-		msgBg = ""
-		msgOpen = "› "
-		msgClose = ""
-		msgPad = 0
-	}
-
-	rootCmd.Flags().StringVarP(&messageFlag, "message", "m", "", "Commit message (use when message collides with a subcommand name)")
-}
-
-// diffStatRe matches lines like "  file.go | 29 ++---"
-var diffStatRe = regexp.MustCompile(`^(.*\|[^+-]*?)(\+*)(-*)$`)
 
 var messageFlag string
+
+func init() {
+	rootCmd.Flags().StringVarP(&messageFlag, "message", "m", "", "Commit message (use when message collides with a subcommand name)")
+}
 
 var rootCmd = &cobra.Command{
 	Use:   "yeet [message...]",
@@ -107,12 +56,12 @@ func runYeet(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to get diff stat: %w", err)
 	}
 	if stat == "" {
-		fmt.Printf("\n  %sNothing to commit.%s\n", dim, reset)
+		fmt.Printf("\n  %sNothing to commit.%s\n", term.Dim, term.Reset)
 		return nil
 	}
 	fmt.Println()
 	for _, line := range strings.Split(stat, "\n") {
-		fmt.Println("  " + colorizeDiffStat(line))
+		fmt.Println("  " + term.ColorizeDiffStat(line))
 	}
 	fmt.Println()
 
@@ -134,70 +83,68 @@ func runYeet(cmd *cobra.Command, args []string) error {
 	// 4. Confirm loop (show message, allow edit)
 	showMessage := !streamed
 	linesToClear := 3
-	// Replace single-line streaming output with full block display
-	if streamed && msgBg != "" {
-		fmt.Print("\033[1A\033[2K\r") // clear the streamed line
+	if streamed && term.MsgBg != "" {
+		fmt.Print("\033[1A\033[2K\r")
 		showMessage = true
 	}
 	for {
 		if showMessage {
-			if msgBg != "" {
-				// 3-line block: top padding, message, bottom padding
+			if term.MsgBg != "" {
 				pad := strings.Repeat(" ", len([]rune(message))+3)
-				fmt.Printf("  %s%s%s\n", msgBar, pad, reset)
-				fmt.Printf("  %s%s%s\n", msgOpen, message, msgClose)
-				fmt.Printf("  %s%s%s\n\n", msgBar, pad, reset)
-				linesToClear = 5 // top + msg + bottom + blank + prompt
+				fmt.Printf("  %s%s%s\n", term.MsgBar, pad, term.Reset)
+				fmt.Printf("  %s%s%s\n", term.MsgOpen, message, term.MsgClose)
+				fmt.Printf("  %s%s%s\n\n", term.MsgBar, pad, term.Reset)
+				linesToClear = 5
 			} else {
-				fmt.Printf("  %s%s%s\n\n", msgOpen, message, msgClose)
+				fmt.Printf("  %s%s%s\n\n", term.MsgOpen, message, term.MsgClose)
 				linesToClear = 3
 			}
 		} else {
 			fmt.Println()
-			showMessage = true // always show on subsequent iterations (after edit)
+			showMessage = true
 			linesToClear = 3
 		}
-		fmt.Printf("  %s%s  ·  %s  ·  %s  ·  %s%s\n",
-			dim,
-			keyhint("enter", "commit"),
-			keyhint("e", "edit"),
-			keyhint("E", "editor"),
-			keyhint("q", "cancel"),
-			reset)
+		fmt.Printf("  %s%s  \u00b7  %s  \u00b7  %s  \u00b7  %s%s\n",
+			term.Dim,
+			term.Keyhint("enter", "commit"),
+			term.Keyhint("e", "edit"),
+			term.Keyhint("E", "editor"),
+			term.Keyhint("q", "cancel"),
+			term.Reset)
 
-		action, err := waitForAction()
+		action, err := term.WaitForAction()
 		if err != nil {
 			return err
 		}
 
 		switch action {
-		case actionCancel:
+		case term.ActionCancel:
 			fmt.Println()
 			if autoStaged {
 				if err := git.Reset(); err != nil {
 					return fmt.Errorf("failed to unstage changes: %w", err)
 				}
 			}
-			fmt.Printf("  %sCancelled.%s\n", dim, reset)
+			fmt.Printf("  %sCancelled.%s\n", term.Dim, term.Reset)
 			return nil
-		case actionEdit:
-			clearLines(linesToClear)
-			edited, err := editLine(message)
+		case term.ActionEdit:
+			term.ClearLines(linesToClear)
+			edited, err := term.EditLine(message)
 			if err != nil {
 				return err
 			}
 			message = edited
 			continue
-		case actionEditExternal:
-			clearLines(linesToClear)
-			edited, err := editExternal(message)
+		case term.ActionEditExternal:
+			term.ClearLines(linesToClear)
+			edited, err := term.EditExternal(message)
 			if err != nil {
 				fmt.Printf("\n  Editor failed: %v\n", err)
 			} else {
 				message = edited
 			}
 			continue
-		case actionConfirm:
+		case term.ActionConfirm:
 			fmt.Println()
 		}
 		break
@@ -208,12 +155,11 @@ func runYeet(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("commit failed: %s", out)
 	}
-	fmt.Printf("  %s✓%s %s\n", green, reset, firstLine(out))
+	fmt.Printf("  %s\u2713%s %s\n", term.Green, term.Reset, firstLine(out))
 
 	// 7. Push
 	pushOut, err := git.Push()
 	if err != nil {
-		// Try set-upstream if push fails
 		pushOut, err = git.PushSetUpstream()
 		if err != nil {
 			return fmt.Errorf("push failed: %s", pushOut)
@@ -221,14 +167,14 @@ func runYeet(cmd *cobra.Command, args []string) error {
 	}
 
 	branch, _ := git.CurrentBranch()
-	fmt.Printf("  %s✓%s %spushed to%s origin/%s\n", green, reset, dim, reset, branch)
+	fmt.Printf("  %s\u2713%s %spushed to%s origin/%s\n", term.Green, term.Reset, term.Dim, term.Reset, branch)
 
 	if usage != nil && usage.InputTokens > 0 {
-		costLine := fmt.Sprintf("%s · %s", usage.FormatTokens(), usage.Model)
+		costLine := fmt.Sprintf("%s \u00b7 %s", usage.FormatTokens(), usage.Model)
 		if cost, ok := usage.Cost(); ok {
-			costLine = fmt.Sprintf("%s · %s · %s", cost, usage.FormatTokens(), usage.Model)
+			costLine = fmt.Sprintf("%s \u00b7 %s \u00b7 %s", cost, usage.FormatTokens(), usage.Model)
 		}
-		fmt.Printf("\n  %s%s%s\n\n", dim, costLine, reset)
+		fmt.Printf("\n  %s%s%s\n\n", term.Dim, costLine, term.Reset)
 	}
 
 	return nil
@@ -242,12 +188,11 @@ func generateOrFallback() (string, *ai.Usage, bool, error) {
 
 	provider, providerErr := ai.NewProvider(cfg)
 
-	// No provider available — offer quick setup or manual input
 	if providerErr != nil {
 		fmt.Printf("  No API key found for %s.\n\n", cfg.Provider)
 		fmt.Println("  Set up AI now? (y/n)")
 
-		yes, err := waitForYesNo()
+		yes, err := term.WaitForYesNo()
 		if err != nil {
 			return "", nil, false, err
 		}
@@ -256,15 +201,13 @@ func generateOrFallback() (string, *ai.Usage, bool, error) {
 			if err := quickSetup(cfg); err != nil {
 				fmt.Printf("  Setup failed: %v\n\n", err)
 			} else {
-				// Retry with new key
 				provider, providerErr = ai.NewProvider(cfg)
 			}
 		}
 
-		// Still no provider — fall back to manual input
 		if providerErr != nil {
 			fmt.Println("  Enter commit message:")
-			msg, err := editLine("")
+			msg, err := term.EditLine("")
 			if err != nil {
 				return "", nil, false, err
 			}
@@ -294,14 +237,14 @@ func generateOrFallback() (string, *ai.Usage, bool, error) {
 		Status:        status,
 	}
 
-	// Try streaming if supported, otherwise fall back to non-streaming
+	// Try streaming if supported
 	if sp, ok := provider.(ai.StreamingProvider); ok {
 		message, usage, err := generateStreaming(sp, ctx)
 		if err != nil {
 			fmt.Print("\r\033[K")
-			fmt.Printf("  %s%v%s\n\n", red, err, reset)
+			fmt.Printf("  %s%v%s\n\n", term.Red, err, term.Reset)
 			fmt.Println("  Enter commit message manually:")
-			msg, editErr := editLine(message) // pre-fill with partial message
+			msg, editErr := term.EditLine(message)
 			if editErr != nil {
 				return "", nil, false, editErr
 			}
@@ -315,13 +258,13 @@ func generateOrFallback() (string, *ai.Usage, bool, error) {
 	}
 
 	// Non-streaming fallback
-	fmt.Printf("  %sGenerating commit message...%s", dim, reset)
+	fmt.Printf("  %sGenerating commit message...%s", term.Dim, term.Reset)
 	message, usage, err := provider.GenerateCommitMessage(ctx)
 	if err != nil {
 		fmt.Println(" failed")
-		fmt.Printf("  %s%v%s\n\n", red, err, reset)
+		fmt.Printf("  %s%v%s\n\n", term.Red, err, term.Reset)
 		fmt.Println("  Enter commit message manually:")
-		msg, editErr := editLine("")
+		msg, editErr := term.EditLine("")
 		if editErr != nil {
 			return "", nil, false, editErr
 		}
@@ -332,71 +275,25 @@ func generateOrFallback() (string, *ai.Usage, bool, error) {
 		return msg, nil, false, nil
 	}
 
-	fmt.Print("\r\033[K") // clear the "Generating..." line
+	fmt.Print("\r\033[K")
 	return message, &usage, false, nil
 }
 
-var spinnerFrames = []rune{'⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'}
-
 func generateStreaming(sp ai.StreamingProvider, ctx ai.CommitContext) (string, ai.Usage, error) {
-	// Start spinner
-	var mu sync.Mutex
-	firstToken := false
-	spinnerDone := make(chan struct{})
-
-	go func() {
-		i := 0
-		ticker := time.NewTicker(80 * time.Millisecond)
-		defer ticker.Stop()
-		// Show initial spinner frame immediately
-		mu.Lock()
-		if !firstToken {
-			fmt.Printf("\r  %s%c Generating...%s", dim, spinnerFrames[0], reset)
-		}
-		mu.Unlock()
-		for {
-			select {
-			case <-spinnerDone:
-				return
-			case <-ticker.C:
-				mu.Lock()
-				if !firstToken {
-					i = (i + 1) % len(spinnerFrames)
-					fmt.Printf("\r  %s%c Generating...%s", dim, spinnerFrames[i], reset)
-				}
-				mu.Unlock()
-			}
-		}
-	}()
+	var s term.Spinner
+	s.Start("Generating...")
 
 	message, usage, err := sp.GenerateCommitMessageStream(ctx, func(token string) {
-		mu.Lock()
-		defer mu.Unlock()
-		if !firstToken {
-			firstToken = true
-			fmt.Printf("\r\033[K") // clear spinner line
-			fmt.Printf("  %s%s", msgOpen, token)
-		} else {
-			fmt.Print(token)
-		}
+		s.ReplaceWithContent(token)
 	})
 
-	close(spinnerDone)
-
-	mu.Lock()
-	if firstToken {
-		fmt.Printf("%s\n", msgClose) // close highlight after streamed message
-	} else {
-		fmt.Print("\r\033[K") // clear spinner if no tokens came
-	}
-	mu.Unlock()
-
+	s.Stop()
 	return message, usage, err
 }
 
 func quickSetup(cfg config.Config) error {
 	fmt.Printf("\n  Enter API key for %s: ", cfg.Provider)
-	key, err := term.ReadPassword(int(os.Stdin.Fd()))
+	key, err := goterm.ReadPassword(int(os.Stdin.Fd()))
 	fmt.Println()
 	if err != nil {
 		return fmt.Errorf("failed to read key: %w", err)
@@ -411,263 +308,8 @@ func quickSetup(cfg config.Config) error {
 		return fmt.Errorf("failed to save key: %w", err)
 	}
 
-	fmt.Printf("  %s✓%s Key saved for %s.\n\n", green, reset, cfg.Provider)
+	fmt.Printf("  %s\u2713%s Key saved for %s.\n\n", term.Green, term.Reset, cfg.Provider)
 	return nil
-}
-
-func waitForYesNo() (bool, error) {
-	fd := int(os.Stdin.Fd())
-	oldState, err := term.MakeRaw(fd)
-	if err != nil {
-		return false, err
-	}
-	defer term.Restore(fd, oldState)
-
-	buf := make([]byte, 1)
-	for {
-		_, err := os.Stdin.Read(buf)
-		if err != nil {
-			return false, err
-		}
-		switch buf[0] {
-		case 'y', 'Y', 13, 10: // y or Enter
-			return true, nil
-		case 'n', 'N', 27, 3: // n, Esc, Ctrl+C
-			return false, nil
-		}
-	}
-}
-
-type action int
-
-const (
-	actionConfirm action = iota
-	actionCancel
-	actionEdit
-	actionEditExternal
-)
-
-func waitForAction() (action, error) {
-	fd := int(os.Stdin.Fd())
-	oldState, err := term.MakeRaw(fd)
-	if err != nil {
-		return actionCancel, fmt.Errorf("failed to set raw terminal: %w", err)
-	}
-	defer term.Restore(fd, oldState)
-
-	buf := make([]byte, 3)
-	for {
-		n, err := os.Stdin.Read(buf)
-		if err != nil {
-			return actionCancel, err
-		}
-		for i := 0; i < n; i++ {
-			switch buf[i] {
-			case 13, 10: // Enter
-				return actionConfirm, nil
-			case 27: // Escape
-				return actionCancel, nil
-			case 3: // Ctrl+C
-				return actionCancel, nil
-			case 'q':
-				return actionCancel, nil
-			case 'e':
-				return actionEdit, nil
-			case 'E':
-				return actionEditExternal, nil
-			}
-		}
-	}
-}
-
-func editLine(initial string) (string, error) {
-	fd := int(os.Stdin.Fd())
-	oldState, err := term.MakeRaw(fd)
-	if err != nil {
-		return initial, fmt.Errorf("failed to set raw terminal: %w", err)
-	}
-	defer term.Restore(fd, oldState)
-
-	line := []rune(initial)
-	cursor := len(line)
-	hasCard := msgBg != ""
-	firstDraw := true
-
-	redraw := func() {
-		if hasCard {
-			pad := strings.Repeat(" ", len(line)+3)
-			// Navigate to top of card (first draw: already there; subsequent: up from message line)
-			if !firstDraw {
-				fmt.Print("\033[1A")
-			}
-			firstDraw = false
-			// Draw 3 lines: top padding, message, bottom padding
-			fmt.Print("\r\033[2K")
-			fmt.Printf("  %s%s%s", msgBar, pad, reset)
-			fmt.Print("\n\033[2K")
-			fmt.Printf("  %s%s%s", msgOpen, string(line), msgClose)
-			fmt.Print("\n\033[2K")
-			fmt.Printf("  %s%s%s", msgBar, pad, reset)
-			// Back to message line, position cursor
-			fmt.Printf("\033[1A\r\033[%dC", 4+cursor) // indent(2) + bar(1) + space(1) + cursor
-		} else {
-			fmt.Print("\r\033[2K")
-			fmt.Printf("  %s%s%s", msgOpen, string(line), msgClose)
-			back := len(line) - cursor + msgPad
-			if back > 0 {
-				fmt.Printf("\033[%dD", back)
-			}
-		}
-	}
-
-	clearEdit := func() {
-		if hasCard && !firstDraw {
-			// Clear all 3 card lines, cursor ends at top
-			fmt.Print("\033[1A\r\033[2K") // up to top, clear
-			fmt.Print("\n\033[2K")        // message, clear
-			fmt.Print("\n\033[2K")        // bottom, clear
-			fmt.Print("\033[2A\r")        // back to top
-		} else {
-			fmt.Print("\r\033[2K")
-		}
-	}
-
-	redraw()
-
-	buf := make([]byte, 4)
-	for {
-		n, err := os.Stdin.Read(buf)
-		if err != nil {
-			return string(line), err
-		}
-
-		for i := 0; i < n; {
-			b := buf[i]
-			switch {
-			case b == 13 || b == 10: // Enter — confirm edit
-				clearEdit()
-				return string(line), nil
-			case b == 27: // Escape sequence
-				if i+2 < n && buf[i+1] == '[' {
-					switch buf[i+2] {
-					case 'C': // Right
-						if cursor < len(line) {
-							cursor++
-						}
-					case 'D': // Left
-						if cursor > 0 {
-							cursor--
-						}
-					case 'H': // Home
-						cursor = 0
-					case 'F': // End
-						cursor = len(line)
-					case '3': // Delete (ESC [ 3 ~)
-						if cursor < len(line) {
-							line = append(line[:cursor], line[cursor+1:]...)
-						}
-						if i+3 < n && buf[i+3] == '~' {
-							i++ // consume the ~
-						}
-					}
-					i += 3
-					redraw()
-					continue
-				}
-				// bare Escape — cancel edit, return original
-				clearEdit()
-				return initial, nil
-			case b == 127 || b == 8: // Backspace
-				if cursor > 0 {
-					line = append(line[:cursor-1], line[cursor:]...)
-					cursor--
-				}
-			case b == 1: // Ctrl+A — home
-				cursor = 0
-			case b == 5: // Ctrl+E — end
-				cursor = len(line)
-			case b == 21: // Ctrl+U — clear line
-				line = line[:0]
-				cursor = 0
-			case b == 3: // Ctrl+C — cancel
-				clearEdit()
-				return initial, nil
-			case b >= 32 && b < 127: // printable ASCII
-				line = append(line[:cursor], append([]rune{rune(b)}, line[cursor:]...)...)
-				cursor++
-			}
-			i++
-			redraw()
-		}
-	}
-}
-
-func getEditor() string {
-	if e := os.Getenv("VISUAL"); e != "" {
-		return e
-	}
-	if e := os.Getenv("EDITOR"); e != "" {
-		return e
-	}
-	return "vi"
-}
-
-func editExternal(initial string) (string, error) {
-	tmpDir := os.TempDir()
-	tmpFile := filepath.Join(tmpDir, "yeet-commit-msg.txt")
-	if err := os.WriteFile(tmpFile, []byte(initial), 0600); err != nil {
-		return initial, fmt.Errorf("failed to create temp file: %w", err)
-	}
-	defer os.Remove(tmpFile)
-
-	editor := getEditor()
-	cmd := exec.Command(editor, tmpFile)
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	if err := cmd.Run(); err != nil {
-		return initial, fmt.Errorf("editor exited with error: %w", err)
-	}
-
-	content, err := os.ReadFile(tmpFile)
-	if err != nil {
-		return initial, fmt.Errorf("failed to read edited file: %w", err)
-	}
-
-	edited := strings.TrimSpace(string(content))
-	if edited == "" {
-		return initial, nil
-	}
-	return edited, nil
-}
-
-// colorizeDiffStat colorizes a single diff stat line.
-// Lines like "file.go | 29 ++---" get colored +/-.
-// Summary lines like "14 files changed, 895 insertions(+), 594 deletions(-)" get dim.
-func colorizeDiffStat(line string) string {
-	// Summary line (last line of diff stat)
-	if strings.Contains(line, "files changed") || strings.Contains(line, "file changed") {
-		return dim + line + reset
-	}
-
-	// Per-file lines: "file.go | 29 ++---"
-	if m := diffStatRe.FindStringSubmatch(line); m != nil {
-		prefix := m[1] // "file.go | 29 "
-		plus := m[2]   // "+++"
-		minus := m[3]  // "---"
-		var b strings.Builder
-		b.WriteString(prefix)
-		if plus != "" {
-			b.WriteString(green + plus + reset)
-		}
-		if minus != "" {
-			b.WriteString(red + minus + reset)
-		}
-		return b.String()
-	}
-
-	return line
 }
 
 func firstLine(s string) string {

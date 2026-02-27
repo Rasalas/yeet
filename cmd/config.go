@@ -6,6 +6,7 @@ import (
 	"os/exec"
 
 	"github.com/rasalas/yeet/internal/config"
+	"github.com/rasalas/yeet/internal/term"
 	"github.com/rasalas/yeet/internal/tui"
 	"github.com/spf13/cobra"
 )
@@ -32,7 +33,7 @@ var configEditCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("failed to get config path: %w", err)
 		}
-		editor := getEditor()
+		editor := term.GetEditor()
 		c := exec.Command(editor, path)
 		c.Stdin = os.Stdin
 		c.Stdout = os.Stdout
@@ -40,7 +41,7 @@ var configEditCmd = &cobra.Command{
 		if err := c.Run(); err != nil {
 			return fmt.Errorf("editor exited with error: %w", err)
 		}
-		fmt.Println("  ✓ Config saved.")
+		fmt.Println("  \u2713 Config saved.")
 		return nil
 	},
 }
