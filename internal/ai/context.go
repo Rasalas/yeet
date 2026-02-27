@@ -11,6 +11,27 @@ type CommitContext struct {
 	Branch        string
 	RecentCommits string
 	Status        string
+
+	// SystemPrompt overrides the default commit-message prompt when set.
+	SystemPrompt string
+	// MaxTokens overrides the default max_tokens when > 0.
+	MaxTokens int
+}
+
+// EffectivePrompt returns SystemPrompt if set, otherwise LoadPrompt().
+func (c CommitContext) EffectivePrompt() string {
+	if c.SystemPrompt != "" {
+		return c.SystemPrompt
+	}
+	return LoadPrompt()
+}
+
+// EffectiveMaxTokens returns MaxTokens if > 0, otherwise 256.
+func (c CommitContext) EffectiveMaxTokens() int {
+	if c.MaxTokens > 0 {
+		return c.MaxTokens
+	}
+	return 256
 }
 
 // BuildUserMessage assembles the user message sent to the AI from git context.

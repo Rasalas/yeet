@@ -62,7 +62,7 @@ func (p *OpenAIProvider) GenerateCommitMessage(ctx CommitContext) (string, Usage
 	body := openaiRequest{
 		Model: p.Model,
 		Messages: []openaiMessage{
-			{Role: "system", Content: LoadPrompt()},
+			{Role: "system", Content: ctx.EffectivePrompt()},
 			{Role: "user", Content: ctx.BuildUserMessage()},
 		},
 	}
@@ -95,7 +95,7 @@ func (p *OpenAIProvider) GenerateCommitMessageStream(ctx CommitContext, onToken 
 	body := openaiRequest{
 		Model: p.Model,
 		Messages: []openaiMessage{
-			{Role: "system", Content: LoadPrompt()},
+			{Role: "system", Content: ctx.EffectivePrompt()},
 			{Role: "user", Content: ctx.BuildUserMessage()},
 		},
 		Stream:        true,

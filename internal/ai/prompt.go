@@ -21,6 +21,18 @@ Rules:
 - Use the branch name as a hint for type and scope when relevant
 - Return ONLY the commit message, nothing else — no quotes, no explanation`
 
+// PRPrompt is the system prompt for generating PR/MR titles and descriptions.
+const PRPrompt = `You are a pull request description generator. Given branch commits and a diff, generate a PR title and markdown body.
+
+Rules:
+- First line: a concise PR title (under 72 characters, no prefix like "PR:" or "feat:")
+- Second line: empty
+- Remaining lines: markdown body with a "## Summary" section containing 2-5 bullet points
+- Bullet points should describe WHAT changed and WHY from an end-user or reviewer perspective
+- Match the language and style of the commit messages when provided
+- Do NOT include a test plan or checklist — only the summary
+- Return ONLY the title and body, nothing else — no quotes, no explanation`
+
 const maxDiffLines = 8000
 
 // PromptPath returns the path to the user's prompt file.

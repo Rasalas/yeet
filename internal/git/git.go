@@ -96,6 +96,47 @@ func (ExecGit) PushSetUpstream() (string, error) {
 	return run("push", "--set-upstream", "origin", branch)
 }
 
+// DefaultBranch detects the default branch (main/master) of the repository.
+func DefaultBranch() (string, error) {
+	// Try symbolic-ref first (works when origin/HEAD is set)
+	if out, err := run("symbolic-ref", "refs/remotes/origin/HEAD"); err == nil {
+		parts := strings.SplitN(out, "/", 4)
+		if len(parts) == 4 {
+			return parts[3], nil
+		}
+	}
+
+	// Fallback: check which common branch exists locally
+	for _, name := range []string{"main", "master"} {
+		if err := exec.Command("git", "rev-parse", "--verify", name).Run(); err == nil {
+			return name, nil
+		}
+	}
+
+	return "", fmt.Errorf("could not detect default branch")
+}
+
+// LogRange returns one-line log entries between base and HEAD.
+func LogRange(base string) (string, error) {
+	return run("log", "--oneline", base+"..HEAD")
+}
+
+// DiffRange returns the diff between the merge-base of base and HEAD.
+func DiffRange(base string) (string, error) {
+	return run("diff", base+"...HEAD")
+}
+
+// DiffStatRange returns the diff stat between the merge-base of base and HEAD.
+func DiffStatRange(base string) (string, error) {
+	return run("diff", "--stat", base+"...HEAD")
+}
+
+// HasUpstream checks whether the current branch has a remote tracking branch.
+func HasUpstream() bool {
+	err := exec.Command("git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}").Run()
+	return err == nil
+}
+
 // Free functions delegate to Default for backward compatibility.
 
 func StageAll() error                        { return Default.StageAll() }

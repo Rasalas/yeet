@@ -41,7 +41,7 @@ func (p *OllamaProvider) GenerateCommitMessage(ctx CommitContext) (string, Usage
 	body := ollamaRequest{
 		Model: p.Model,
 		Messages: []ollamaMessage{
-			{Role: "system", Content: LoadPrompt()},
+			{Role: "system", Content: ctx.EffectivePrompt()},
 			{Role: "user", Content: ctx.BuildUserMessage()},
 		},
 		Stream: false,
@@ -75,7 +75,7 @@ func (p *OllamaProvider) GenerateCommitMessageStream(ctx CommitContext, onToken 
 	body := ollamaRequest{
 		Model: p.Model,
 		Messages: []ollamaMessage{
-			{Role: "system", Content: LoadPrompt()},
+			{Role: "system", Content: ctx.EffectivePrompt()},
 			{Role: "user", Content: ctx.BuildUserMessage()},
 		},
 		Stream: true,

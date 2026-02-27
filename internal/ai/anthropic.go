@@ -51,8 +51,8 @@ func (p *AnthropicProvider) headers() map[string]string {
 func (p *AnthropicProvider) GenerateCommitMessage(ctx CommitContext) (string, Usage, error) {
 	body := anthropicRequest{
 		Model:     p.Model,
-		MaxTokens: 256,
-		System:    LoadPrompt(),
+		MaxTokens: ctx.EffectiveMaxTokens(),
+		System:    ctx.EffectivePrompt(),
 		Messages:  []anthropicMessage{{Role: "user", Content: ctx.BuildUserMessage()}},
 	}
 
@@ -83,8 +83,8 @@ func (p *AnthropicProvider) GenerateCommitMessage(ctx CommitContext) (string, Us
 func (p *AnthropicProvider) GenerateCommitMessageStream(ctx CommitContext, onToken func(string)) (string, Usage, error) {
 	body := anthropicRequest{
 		Model:     p.Model,
-		MaxTokens: 256,
-		System:    LoadPrompt(),
+		MaxTokens: ctx.EffectiveMaxTokens(),
+		System:    ctx.EffectivePrompt(),
 		Messages:  []anthropicMessage{{Role: "user", Content: ctx.BuildUserMessage()}},
 		Stream:    true,
 	}
