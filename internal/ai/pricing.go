@@ -11,17 +11,30 @@ type ModelPricing struct {
 var pricing = map[string]ModelPricing{
 	// Anthropic
 	"claude-haiku-4-5-20251001": {1.00, 5.00},
-	"claude-sonnet-4-20250514":  {3.00, 15.00},
+	"claude-sonnet-4-6":         {3.00, 15.00},
+	"claude-opus-4-6":           {5.00, 25.00},
 
 	// OpenAI
-	"gpt-4o-mini": {0.15, 0.60},
-	"gpt-4o":      {2.50, 10.00},
+	"gpt-4.1-nano": {0.10, 0.40},
+	"gpt-4o-mini":  {0.15, 0.60},
+	"gpt-4.1-mini": {0.40, 1.60},
+	"gpt-4.1":      {2.00, 8.00},
+	"gpt-4o":       {2.50, 10.00},
+	"o4-mini":      {1.10, 4.40},
+
+	// Google
+	"gemini-2.5-flash":      {0.15, 0.60},
+	"gemini-3-flash-preview": {0.50, 3.00},
 
 	// Groq
+	"llama-3.1-8b-instant":    {0.05, 0.08},
 	"llama-3.3-70b-versatile": {0.59, 0.79},
+	"openai/gpt-oss-20b":      {0.10, 0.75},
 
 	// Mistral
 	"mistral-small-latest": {0.20, 0.60},
+	"codestral-latest":     {0.30, 0.90},
+	"mistral-large-latest": {0.50, 1.50},
 }
 
 // Cost returns the estimated cost in USD and a human-readable string.
