@@ -3,28 +3,8 @@ package ai
 import (
 	"bufio"
 	"io"
-	"net"
-	"net/http"
 	"strings"
-	"time"
 )
-
-// aiClient is the shared HTTP client for AI provider requests.
-// Transport-level timeouts protect against unreachable servers.
-// No overall Client.Timeout — streaming responses can take as long as needed.
-var aiClient = &http.Client{
-	Transport: &http.Transport{
-		DialContext: (&net.Dialer{
-			Timeout: 10 * time.Second,
-		}).DialContext,
-		TLSHandshakeTimeout:   10 * time.Second,
-		ResponseHeaderTimeout: 15 * time.Second,
-	},
-}
-
-// requestTimeout is the maximum time for non-streaming API requests.
-// Applied via context so it covers the full round-trip including body read.
-const requestTimeout = 60 * time.Second
 
 // StreamingProvider extends Provider with token-by-token streaming support.
 type StreamingProvider interface {

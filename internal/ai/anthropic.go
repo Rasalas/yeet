@@ -1,12 +1,10 @@
 package ai
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
 	"strings"
 )
 
@@ -43,52 +41,32 @@ type anthropicResponse struct {
 	} `json:"error"`
 }
 
+func (p *AnthropicProvider) headers() map[string]string {
+	return map[string]string{
+		"x-api-key":         p.APIKey,
+		"anthropic-version": anthropicVersion,
+	}
+}
+
 func (p *AnthropicProvider) GenerateCommitMessage(ctx CommitContext) (string, Usage, error) {
 	body := anthropicRequest{
 		Model:     p.Model,
 		MaxTokens: 256,
 		System:    LoadPrompt(),
-		Messages: []anthropicMessage{
-			{Role: "user", Content: ctx.BuildUserMessage()},
-		},
-	}
-
-	jsonBody, err := json.Marshal(body)
-	if err != nil {
-		return "", Usage{}, fmt.Errorf("failed to marshal request: %w", err)
+		Messages:  []anthropicMessage{{Role: "user", Content: ctx.BuildUserMessage()}},
 	}
 
 	reqCtx, cancel := context.WithTimeout(context.Background(), requestTimeout)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(reqCtx, "POST", "https://api.anthropic.com/v1/messages", bytes.NewReader(jsonBody))
-	if err != nil {
-		return "", Usage{}, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-api-key", p.APIKey)
-	req.Header.Set("anthropic-version", anthropicVersion)
-
-	resp, err := aiClient.Do(req)
-	if err != nil {
-		return "", Usage{}, fmt.Errorf("API request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", Usage{}, fmt.Errorf("failed to read response: %w", err)
-	}
-
 	var result anthropicResponse
-	if err := json.Unmarshal(respBody, &result); err != nil {
-		return "", Usage{}, fmt.Errorf("failed to parse response: %w", err)
+	if err := doRequest(reqCtx, "POST", "https://api.anthropic.com/v1/messages", body, p.headers(), &result); err != nil {
+		return "", Usage{}, err
 	}
 
 	if result.Error != nil {
 		return "", Usage{}, fmt.Errorf("API error: %s", result.Error.Message)
 	}
-
 	if len(result.Content) == 0 {
 		return "", Usage{}, fmt.Errorf("empty response from API")
 	}
@@ -107,28 +85,13 @@ func (p *AnthropicProvider) GenerateCommitMessageStream(ctx CommitContext, onTok
 		Model:     p.Model,
 		MaxTokens: 256,
 		System:    LoadPrompt(),
-		Messages: []anthropicMessage{
-			{Role: "user", Content: ctx.BuildUserMessage()},
-		},
-		Stream: true,
+		Messages:  []anthropicMessage{{Role: "user", Content: ctx.BuildUserMessage()}},
+		Stream:    true,
 	}
 
-	jsonBody, err := json.Marshal(body)
-	if err != nil {
-		return "", Usage{}, fmt.Errorf("failed to marshal request: %w", err)
-	}
-
-	req, err := http.NewRequest("POST", "https://api.anthropic.com/v1/messages", bytes.NewReader(jsonBody))
+	resp, err := doStream("https://api.anthropic.com/v1/messages", body, p.headers())
 	if err != nil {
 		return "", Usage{}, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-api-key", p.APIKey)
-	req.Header.Set("anthropic-version", anthropicVersion)
-
-	resp, err := aiClient.Do(req)
-	if err != nil {
-		return "", Usage{}, fmt.Errorf("API request failed: %w", err)
 	}
 	defer resp.Body.Close()
 

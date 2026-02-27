@@ -2,12 +2,9 @@ package ai
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"strings"
 )
 
@@ -36,6 +33,10 @@ type ollamaResponse struct {
 	Error           string `json:"error,omitempty"`
 }
 
+func (p *OllamaProvider) apiURL() string {
+	return strings.TrimRight(p.URL, "/") + "/api/chat"
+}
+
 func (p *OllamaProvider) GenerateCommitMessage(ctx CommitContext) (string, Usage, error) {
 	body := ollamaRequest{
 		Model: p.Model,
@@ -46,35 +47,15 @@ func (p *OllamaProvider) GenerateCommitMessage(ctx CommitContext) (string, Usage
 		Stream: false,
 	}
 
-	jsonBody, err := json.Marshal(body)
-	if err != nil {
-		return "", Usage{}, fmt.Errorf("failed to marshal request: %w", err)
-	}
-
 	reqCtx, cancel := context.WithTimeout(context.Background(), requestTimeout)
 	defer cancel()
 
-	url := strings.TrimRight(p.URL, "/") + "/api/chat"
-	req, err := http.NewRequestWithContext(reqCtx, "POST", url, bytes.NewReader(jsonBody))
-	if err != nil {
-		return "", Usage{}, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := aiClient.Do(req)
-	if err != nil {
-		return "", Usage{}, fmt.Errorf("API request failed (is Ollama running at %s?): %w", p.URL, err)
-	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", Usage{}, fmt.Errorf("failed to read response: %w", err)
-	}
-
 	var result ollamaResponse
-	if err := json.Unmarshal(respBody, &result); err != nil {
-		return "", Usage{}, fmt.Errorf("failed to parse response: %w", err)
+	if err := doRequest(reqCtx, "POST", p.apiURL(), body, nil, &result); err != nil {
+		if strings.Contains(err.Error(), "API request failed") {
+			return "", Usage{}, fmt.Errorf("API request failed (is Ollama running at %s?): %w", p.URL, err)
+		}
+		return "", Usage{}, err
 	}
 
 	if result.Error != "" {
@@ -100,19 +81,7 @@ func (p *OllamaProvider) GenerateCommitMessageStream(ctx CommitContext, onToken 
 		Stream: true,
 	}
 
-	jsonBody, err := json.Marshal(body)
-	if err != nil {
-		return "", Usage{}, fmt.Errorf("failed to marshal request: %w", err)
-	}
-
-	url := strings.TrimRight(p.URL, "/") + "/api/chat"
-	req, err := http.NewRequest("POST", url, bytes.NewReader(jsonBody))
-	if err != nil {
-		return "", Usage{}, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := aiClient.Do(req)
+	resp, err := doStream(p.apiURL(), body, nil)
 	if err != nil {
 		return "", Usage{}, fmt.Errorf("API request failed (is Ollama running at %s?): %w", p.URL, err)
 	}
