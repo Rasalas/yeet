@@ -1,6 +1,11 @@
 package config
 
-import "testing"
+import (
+	"strings"
+	"testing"
+
+	"github.com/BurntSushi/toml"
+)
 
 func TestDefaultConfig(t *testing.T) {
 	cfg := DefaultConfig()
@@ -114,6 +119,35 @@ func TestProviders(t *testing.T) {
 		if p[i] != name {
 			t.Errorf("Providers()[%d] = %q, want %q", i, p[i], name)
 		}
+	}
+}
+
+func TestPricingOverrideDecode(t *testing.T) {
+	input := `
+provider = "openrouter"
+
+[pricing."meta-llama/Llama-3-70b-chat-hf"]
+input = 0.90
+output = 0.90
+
+[pricing."custom/cheap-model"]
+input = 0.05
+output = 0.10
+`
+	var cfg Config
+	if _, err := toml.NewDecoder(strings.NewReader(input)).Decode(&cfg); err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	if len(cfg.Pricing) != 2 {
+		t.Fatalf("Pricing has %d entries, want 2", len(cfg.Pricing))
+	}
+	llama := cfg.Pricing["meta-llama/Llama-3-70b-chat-hf"]
+	if llama.Input != 0.90 || llama.Output != 0.90 {
+		t.Errorf("llama pricing = {%v, %v}, want {0.90, 0.90}", llama.Input, llama.Output)
+	}
+	cheap := cfg.Pricing["custom/cheap-model"]
+	if cheap.Input != 0.05 || cheap.Output != 0.10 {
+		t.Errorf("cheap pricing = {%v, %v}, want {0.05, 0.10}", cheap.Input, cheap.Output)
 	}
 }
 

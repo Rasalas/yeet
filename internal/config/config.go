@@ -19,12 +19,18 @@ type ProviderConfig struct {
 	Env   string `toml:"env,omitempty"`
 }
 
+type PricingOverride struct {
+	Input  float64 `toml:"input"`
+	Output float64 `toml:"output"`
+}
+
 type Config struct {
-	Provider  string                    `toml:"provider"`
-	Anthropic ProviderConfig            `toml:"anthropic"`
-	OpenAI    ProviderConfig            `toml:"openai"`
-	Ollama    ProviderConfig            `toml:"ollama"`
-	Custom    map[string]ProviderConfig `toml:"custom"`
+	Provider  string                       `toml:"provider"`
+	Anthropic ProviderConfig               `toml:"anthropic"`
+	OpenAI    ProviderConfig               `toml:"openai"`
+	Ollama    ProviderConfig               `toml:"ollama"`
+	Custom    map[string]ProviderConfig    `toml:"custom"`
+	Pricing   map[string]PricingOverride   `toml:"pricing"`
 }
 
 // WellKnown provides defaults for providers yeet recognizes but doesn't have

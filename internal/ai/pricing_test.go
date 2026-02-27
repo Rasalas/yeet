@@ -99,3 +99,30 @@ func TestModelInputCost(t *testing.T) {
 		t.Errorf("ModelInputCost(nonexistent) = %v, want -1", got)
 	}
 }
+
+func TestSetPricing(t *testing.T) {
+	// New model gets pricing
+	SetPricing("custom/test-model", 1.50, 3.00)
+	u := Usage{Model: "custom/test-model", InputTokens: 1_000_000, OutputTokens: 1_000_000}
+	cost, ok := u.Cost()
+	if !ok {
+		t.Fatal("Cost() returned false for custom model after SetPricing")
+	}
+	if cost != "$4.5000" {
+		t.Errorf("Cost() = %q, want \"$4.5000\"", cost)
+	}
+
+	// Override existing model
+	SetPricing("gpt-4o-mini", 0.50, 1.00)
+	u2 := Usage{Model: "gpt-4o-mini", InputTokens: 1_000_000, OutputTokens: 1_000_000}
+	cost2, ok := u2.Cost()
+	if !ok {
+		t.Fatal("Cost() returned false after override")
+	}
+	if cost2 != "$1.5000" {
+		t.Errorf("Cost() = %q, want \"$1.5000\"", cost2)
+	}
+
+	// Restore original so other tests aren't affected
+	SetPricing("gpt-4o-mini", 0.15, 0.60)
+}

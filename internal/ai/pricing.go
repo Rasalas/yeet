@@ -73,3 +73,9 @@ func ModelInputCost(model string) float64 {
 	}
 	return p.InputPerMillion
 }
+
+// SetPricing adds or overrides pricing for a model.
+// Input and output are costs per million tokens in USD.
+func SetPricing(model string, input, output float64) {
+	pricing[model] = ModelPricing{input, output}
+}

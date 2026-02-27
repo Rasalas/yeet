@@ -199,6 +199,10 @@ func generateOrFallback() (string, *ai.Usage, bool, error) {
 		cfg = config.DefaultConfig()
 	}
 
+	for model, p := range cfg.Pricing {
+		ai.SetPricing(model, p.Input, p.Output)
+	}
+
 	provider, providerErr := ai.NewProvider(cfg)
 
 	if providerErr != nil {
