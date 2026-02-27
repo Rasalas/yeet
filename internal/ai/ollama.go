@@ -3,6 +3,7 @@ package ai
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -50,14 +51,17 @@ func (p *OllamaProvider) GenerateCommitMessage(ctx CommitContext) (string, Usage
 		return "", Usage{}, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
+	reqCtx, cancel := context.WithTimeout(context.Background(), requestTimeout)
+	defer cancel()
+
 	url := strings.TrimRight(p.URL, "/") + "/api/chat"
-	req, err := http.NewRequest("POST", url, bytes.NewReader(jsonBody))
+	req, err := http.NewRequestWithContext(reqCtx, "POST", url, bytes.NewReader(jsonBody))
 	if err != nil {
 		return "", Usage{}, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := aiClient.Do(req)
 	if err != nil {
 		return "", Usage{}, fmt.Errorf("API request failed (is Ollama running at %s?): %w", p.URL, err)
 	}
@@ -108,7 +112,7 @@ func (p *OllamaProvider) GenerateCommitMessageStream(ctx CommitContext, onToken 
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := aiClient.Do(req)
 	if err != nil {
 		return "", Usage{}, fmt.Errorf("API request failed (is Ollama running at %s?): %w", p.URL, err)
 	}

@@ -2,6 +2,7 @@ package ai
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -65,14 +66,17 @@ func (p *OpenAIProvider) GenerateCommitMessage(ctx CommitContext) (string, Usage
 		baseURL = "https://api.openai.com/v1"
 	}
 
-	req, err := http.NewRequest("POST", strings.TrimRight(baseURL, "/")+"/chat/completions", bytes.NewReader(jsonBody))
+	reqCtx, cancel := context.WithTimeout(context.Background(), requestTimeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(reqCtx, "POST", strings.TrimRight(baseURL, "/")+"/chat/completions", bytes.NewReader(jsonBody))
 	if err != nil {
 		return "", Usage{}, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+p.APIKey)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := aiClient.Do(req)
 	if err != nil {
 		return "", Usage{}, fmt.Errorf("API request failed: %w", err)
 	}
@@ -133,7 +137,7 @@ func (p *OpenAIProvider) GenerateCommitMessageStream(ctx CommitContext, onToken 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+p.APIKey)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := aiClient.Do(req)
 	if err != nil {
 		return "", Usage{}, fmt.Errorf("API request failed: %w", err)
 	}

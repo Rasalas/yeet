@@ -2,6 +2,7 @@ package ai
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -57,7 +58,10 @@ func (p *AnthropicProvider) GenerateCommitMessage(ctx CommitContext) (string, Us
 		return "", Usage{}, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	req, err := http.NewRequest("POST", "https://api.anthropic.com/v1/messages", bytes.NewReader(jsonBody))
+	reqCtx, cancel := context.WithTimeout(context.Background(), requestTimeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(reqCtx, "POST", "https://api.anthropic.com/v1/messages", bytes.NewReader(jsonBody))
 	if err != nil {
 		return "", Usage{}, err
 	}
@@ -65,7 +69,7 @@ func (p *AnthropicProvider) GenerateCommitMessage(ctx CommitContext) (string, Us
 	req.Header.Set("x-api-key", p.APIKey)
 	req.Header.Set("anthropic-version", anthropicVersion)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := aiClient.Do(req)
 	if err != nil {
 		return "", Usage{}, fmt.Errorf("API request failed: %w", err)
 	}
@@ -122,7 +126,7 @@ func (p *AnthropicProvider) GenerateCommitMessageStream(ctx CommitContext, onTok
 	req.Header.Set("x-api-key", p.APIKey)
 	req.Header.Set("anthropic-version", anthropicVersion)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := aiClient.Do(req)
 	if err != nil {
 		return "", Usage{}, fmt.Errorf("API request failed: %w", err)
 	}

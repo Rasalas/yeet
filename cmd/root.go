@@ -490,14 +490,45 @@ func editLine(initial string) (string, error) {
 
 	line := []rune(initial)
 	cursor := len(line)
+	hasCard := msgBg != ""
+	firstDraw := true
 
 	redraw := func() {
-		fmt.Print("\r\033[2K")
-		fmt.Printf("  %s%s%s", msgOpen, string(line), msgClose)
-		// move cursor to correct position (+msgPad for trailing padding)
-		back := len(line) - cursor + msgPad
-		if back > 0 {
-			fmt.Printf("\033[%dD", back)
+		if hasCard {
+			pad := strings.Repeat(" ", len(line)+3)
+			// Navigate to top of card (first draw: already there; subsequent: up from message line)
+			if !firstDraw {
+				fmt.Print("\033[1A")
+			}
+			firstDraw = false
+			// Draw 3 lines: top padding, message, bottom padding
+			fmt.Print("\r\033[2K")
+			fmt.Printf("  %s%s%s", msgBar, pad, reset)
+			fmt.Print("\n\033[2K")
+			fmt.Printf("  %s%s%s", msgOpen, string(line), msgClose)
+			fmt.Print("\n\033[2K")
+			fmt.Printf("  %s%s%s", msgBar, pad, reset)
+			// Back to message line, position cursor
+			fmt.Printf("\033[1A\r\033[%dC", 4+cursor) // indent(2) + bar(1) + space(1) + cursor
+		} else {
+			fmt.Print("\r\033[2K")
+			fmt.Printf("  %s%s%s", msgOpen, string(line), msgClose)
+			back := len(line) - cursor + msgPad
+			if back > 0 {
+				fmt.Printf("\033[%dD", back)
+			}
+		}
+	}
+
+	clearEdit := func() {
+		if hasCard && !firstDraw {
+			// Clear all 3 card lines, cursor ends at top
+			fmt.Print("\033[1A\r\033[2K") // up to top, clear
+			fmt.Print("\n\033[2K")        // message, clear
+			fmt.Print("\n\033[2K")        // bottom, clear
+			fmt.Print("\033[2A\r")        // back to top
+		} else {
+			fmt.Print("\r\033[2K")
 		}
 	}
 
@@ -514,7 +545,7 @@ func editLine(initial string) (string, error) {
 			b := buf[i]
 			switch {
 			case b == 13 || b == 10: // Enter — confirm edit
-				fmt.Print("\r\033[2K")
+				clearEdit()
 				return string(line), nil
 			case b == 27: // Escape sequence
 				if i+2 < n && buf[i+1] == '[' {
@@ -544,7 +575,7 @@ func editLine(initial string) (string, error) {
 					continue
 				}
 				// bare Escape — cancel edit, return original
-				fmt.Print("\r\033[2K")
+				clearEdit()
 				return initial, nil
 			case b == 127 || b == 8: // Backspace
 				if cursor > 0 {
@@ -559,7 +590,7 @@ func editLine(initial string) (string, error) {
 				line = line[:0]
 				cursor = 0
 			case b == 3: // Ctrl+C — cancel
-				fmt.Print("\r\033[2K")
+				clearEdit()
 				return initial, nil
 			case b >= 32 && b < 127: // printable ASCII
 				line = append(line[:cursor], append([]rune{rune(b)}, line[cursor:]...)...)
