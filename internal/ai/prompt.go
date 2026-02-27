@@ -1,12 +1,12 @@
 package ai
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 )
 
+// DefaultPrompt is the built-in system prompt for commit message generation.
 const DefaultPrompt = `You are a commit message generator. Given git context, generate a single conventional commit message.
 
 Rules:
@@ -23,6 +23,7 @@ Rules:
 
 const maxDiffLines = 8000
 
+// PromptPath returns the path to the user's prompt file.
 func PromptPath() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -41,7 +42,6 @@ func LoadPrompt() string {
 
 	data, err := os.ReadFile(path)
 	if err != nil {
-		// File doesn't exist — create it with the default
 		WritePrompt(DefaultPrompt)
 		return DefaultPrompt
 	}
@@ -53,6 +53,7 @@ func LoadPrompt() string {
 	return prompt
 }
 
+// WritePrompt writes the prompt content to the prompt file.
 func WritePrompt(content string) error {
 	path, err := PromptPath()
 	if err != nil {
@@ -62,35 +63,6 @@ func WritePrompt(content string) error {
 		return err
 	}
 	return os.WriteFile(path, []byte(content+"\n"), 0644)
-}
-
-// CommitContext holds all the information sent to the AI provider.
-type CommitContext struct {
-	Diff          string
-	Branch        string
-	RecentCommits string
-	Status        string
-}
-
-func (c CommitContext) BuildUserMessage() string {
-	var b strings.Builder
-
-	if c.Branch != "" {
-		fmt.Fprintf(&b, "Branch: %s\n\n", c.Branch)
-	}
-
-	if c.Status != "" {
-		fmt.Fprintf(&b, "Files changed:\n%s\n\n", c.Status)
-	}
-
-	if c.RecentCommits != "" {
-		fmt.Fprintf(&b, "Recent commits:\n%s\n\n", c.RecentCommits)
-	}
-
-	b.WriteString("Diff:\n")
-	b.WriteString(truncateDiff(c.Diff))
-
-	return b.String()
 }
 
 func truncateDiff(diff string) string {
