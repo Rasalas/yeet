@@ -6,6 +6,7 @@ import (
 	"os/exec"
 
 	"github.com/rasalas/yeet/internal/ai"
+	"github.com/rasalas/yeet/internal/term"
 	"github.com/spf13/cobra"
 )
 
@@ -25,7 +26,7 @@ var promptCmd = &cobra.Command{
 			return err
 		}
 
-		editor := getEditor()
+		editor := term.GetEditor()
 		c := exec.Command(editor, path)
 		c.Stdin = os.Stdin
 		c.Stdout = os.Stdout
@@ -35,7 +36,7 @@ var promptCmd = &cobra.Command{
 			return fmt.Errorf("editor exited with error: %w", err)
 		}
 
-		fmt.Printf("  %s✓%s Prompt saved.\n", green, reset)
+		fmt.Printf("  %s\u2713%s Prompt saved.\n", term.Green, term.Reset)
 		return nil
 	},
 }
@@ -47,7 +48,7 @@ var promptResetCmd = &cobra.Command{
 		if err := ai.WritePrompt(ai.DefaultPrompt); err != nil {
 			return fmt.Errorf("failed to reset prompt: %w", err)
 		}
-		fmt.Printf("  %s✓%s Prompt reset to default.\n", green, reset)
+		fmt.Printf("  %s\u2713%s Prompt reset to default.\n", term.Green, term.Reset)
 		return nil
 	},
 }

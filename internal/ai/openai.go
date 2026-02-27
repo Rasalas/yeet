@@ -1,12 +1,10 @@
 package ai
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
 	"strings"
 )
 
@@ -17,10 +15,10 @@ type OpenAIProvider struct {
 }
 
 type openaiRequest struct {
-	Model         string              `json:"model"`
-	Messages      []openaiMessage     `json:"messages"`
-	Stream        bool                `json:"stream,omitempty"`
-	StreamOptions *openaiStreamOpts   `json:"stream_options,omitempty"`
+	Model         string            `json:"model"`
+	Messages      []openaiMessage   `json:"messages"`
+	Stream        bool              `json:"stream,omitempty"`
+	StreamOptions *openaiStreamOpts `json:"stream_options,omitempty"`
 }
 
 type openaiStreamOpts struct {
@@ -47,55 +45,39 @@ type openaiResponse struct {
 	} `json:"error"`
 }
 
+func (p *OpenAIProvider) baseURL() string {
+	if p.BaseURL != "" {
+		return strings.TrimRight(p.BaseURL, "/")
+	}
+	return "https://api.openai.com/v1"
+}
+
+func (p *OpenAIProvider) headers() map[string]string {
+	return map[string]string{
+		"Authorization": "Bearer " + p.APIKey,
+	}
+}
+
 func (p *OpenAIProvider) GenerateCommitMessage(ctx CommitContext) (string, Usage, error) {
 	body := openaiRequest{
 		Model: p.Model,
 		Messages: []openaiMessage{
-			{Role: "system", Content: LoadPrompt()},
+			{Role: "system", Content: ctx.EffectivePrompt()},
 			{Role: "user", Content: ctx.BuildUserMessage()},
 		},
-	}
-
-	jsonBody, err := json.Marshal(body)
-	if err != nil {
-		return "", Usage{}, fmt.Errorf("failed to marshal request: %w", err)
-	}
-
-	baseURL := p.BaseURL
-	if baseURL == "" {
-		baseURL = "https://api.openai.com/v1"
 	}
 
 	reqCtx, cancel := context.WithTimeout(context.Background(), requestTimeout)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(reqCtx, "POST", strings.TrimRight(baseURL, "/")+"/chat/completions", bytes.NewReader(jsonBody))
-	if err != nil {
-		return "", Usage{}, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+p.APIKey)
-
-	resp, err := aiClient.Do(req)
-	if err != nil {
-		return "", Usage{}, fmt.Errorf("API request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", Usage{}, fmt.Errorf("failed to read response: %w", err)
-	}
-
 	var result openaiResponse
-	if err := json.Unmarshal(respBody, &result); err != nil {
-		return "", Usage{}, fmt.Errorf("failed to parse response: %w", err)
+	if err := doRequest(reqCtx, "POST", p.baseURL()+"/chat/completions", body, p.headers(), &result); err != nil {
+		return "", Usage{}, err
 	}
 
 	if result.Error != nil {
 		return "", Usage{}, fmt.Errorf("API error: %s", result.Error.Message)
 	}
-
 	if len(result.Choices) == 0 {
 		return "", Usage{}, fmt.Errorf("empty response from API")
 	}
@@ -113,33 +95,16 @@ func (p *OpenAIProvider) GenerateCommitMessageStream(ctx CommitContext, onToken 
 	body := openaiRequest{
 		Model: p.Model,
 		Messages: []openaiMessage{
-			{Role: "system", Content: LoadPrompt()},
+			{Role: "system", Content: ctx.EffectivePrompt()},
 			{Role: "user", Content: ctx.BuildUserMessage()},
 		},
 		Stream:        true,
 		StreamOptions: &openaiStreamOpts{IncludeUsage: true},
 	}
 
-	jsonBody, err := json.Marshal(body)
-	if err != nil {
-		return "", Usage{}, fmt.Errorf("failed to marshal request: %w", err)
-	}
-
-	baseURL := p.BaseURL
-	if baseURL == "" {
-		baseURL = "https://api.openai.com/v1"
-	}
-
-	req, err := http.NewRequest("POST", strings.TrimRight(baseURL, "/")+"/chat/completions", bytes.NewReader(jsonBody))
+	resp, err := doStream(p.baseURL()+"/chat/completions", body, p.headers())
 	if err != nil {
 		return "", Usage{}, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+p.APIKey)
-
-	resp, err := aiClient.Do(req)
-	if err != nil {
-		return "", Usage{}, fmt.Errorf("API request failed: %w", err)
 	}
 	defer resp.Body.Close()
 

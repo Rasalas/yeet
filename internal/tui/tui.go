@@ -9,16 +9,17 @@ import (
 	"github.com/rasalas/yeet/internal/ai"
 	"github.com/rasalas/yeet/internal/config"
 	"github.com/rasalas/yeet/internal/keyring"
+	"github.com/rasalas/yeet/internal/term"
 )
 
 var (
-	colorPrimary   = lipgloss.Color("#FF8C42")
-	colorSecondary = lipgloss.Color("#FFB074")
-	colorMuted     = lipgloss.Color("#78716C")
-	colorSuccess   = lipgloss.Color("#4ADE80")
-	colorDanger    = lipgloss.Color("#FF6B6B")
-	colorWarning   = lipgloss.Color("#FBBF24")
-	colorText      = lipgloss.Color("#FEF9F3")
+	colorPrimary   = lipgloss.Color(term.HexPrimary)
+	colorSecondary = lipgloss.Color(term.HexSecondary)
+	colorMuted     = lipgloss.Color(term.HexMuted)
+	colorSuccess   = lipgloss.Color(term.HexSuccess)
+	colorDanger    = lipgloss.Color(term.HexDanger)
+	colorWarning   = lipgloss.Color(term.HexWarning)
+	colorText      = lipgloss.Color(term.HexText)
 
 	styleTitle    = lipgloss.NewStyle().Bold(true).Foreground(colorPrimary)
 	styleSelected = lipgloss.NewStyle().Foreground(colorPrimary).Bold(true)
