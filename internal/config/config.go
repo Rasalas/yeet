@@ -247,15 +247,6 @@ func (c Config) ResolveProviderFull(name string) (ResolvedProvider, bool) {
 	return rp, true
 }
 
-// ResolveProvider returns the effective config for a non-builtin provider.
-// Kept for backward compatibility; prefer ResolveProviderFull.
-func (c Config) ResolveProvider(name string) (ProviderConfig, bool) {
-	rp, ok := c.ResolveProviderFull(name)
-	if !ok {
-		return ProviderConfig{}, false
-	}
-	return ProviderConfig{Model: rp.Model, URL: rp.URL, Env: rp.Env}, true
-}
 
 // SetModel writes a model to the appropriate config location.
 func (c *Config) SetModel(provider, model string) {

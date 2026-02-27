@@ -53,15 +53,6 @@ func Resolve(provider, customEnv string) (string, KeySource) {
 	return "", SourceNone
 }
 
-// Get retrieves a key using the default env var mapping.
-func Get(provider string) (string, error) {
-	key, source := Resolve(provider, "")
-	if source == SourceNone {
-		return "", gokeyring.ErrNotFound
-	}
-	return key, nil
-}
-
 // GetWithEnv retrieves a key using a custom env var name.
 func GetWithEnv(provider, customEnv string) (string, error) {
 	key, source := Resolve(provider, customEnv)

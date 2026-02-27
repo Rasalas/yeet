@@ -50,65 +50,6 @@ func TestDefaultModel(t *testing.T) {
 	}
 }
 
-func TestResolveProvider(t *testing.T) {
-	t.Run("well-known provider", func(t *testing.T) {
-		cfg := DefaultConfig()
-		pc, ok := cfg.ResolveProvider("google")
-		if !ok {
-			t.Fatal("ResolveProvider(google) returned false")
-		}
-		if pc.Model != "gemini-3-flash-preview" {
-			t.Errorf("Model = %q", pc.Model)
-		}
-		if pc.Env != "GOOGLE_API_KEY" {
-			t.Errorf("Env = %q", pc.Env)
-		}
-	})
-
-	t.Run("custom overrides well-known", func(t *testing.T) {
-		cfg := DefaultConfig()
-		cfg.Custom = map[string]ProviderConfig{
-			"google": {Model: "gemini-custom", URL: "https://custom.example.com"},
-		}
-		pc, ok := cfg.ResolveProvider("google")
-		if !ok {
-			t.Fatal("ResolveProvider(google) returned false")
-		}
-		if pc.Model != "gemini-custom" {
-			t.Errorf("Model = %q, want \"gemini-custom\"", pc.Model)
-		}
-		if pc.URL != "https://custom.example.com" {
-			t.Errorf("URL = %q", pc.URL)
-		}
-		// Env should fall back to well-known since custom doesn't set it
-		if pc.Env != "GOOGLE_API_KEY" {
-			t.Errorf("Env = %q, want \"GOOGLE_API_KEY\"", pc.Env)
-		}
-	})
-
-	t.Run("purely custom provider", func(t *testing.T) {
-		cfg := DefaultConfig()
-		cfg.Custom = map[string]ProviderConfig{
-			"together": {Model: "llama-70b", URL: "https://api.together.xyz/v1", Env: "TOGETHER_API_KEY"},
-		}
-		pc, ok := cfg.ResolveProvider("together")
-		if !ok {
-			t.Fatal("ResolveProvider(together) returned false")
-		}
-		if pc.Model != "llama-70b" {
-			t.Errorf("Model = %q", pc.Model)
-		}
-	})
-
-	t.Run("unknown provider", func(t *testing.T) {
-		cfg := DefaultConfig()
-		_, ok := cfg.ResolveProvider("nonexistent")
-		if ok {
-			t.Error("ResolveProvider(nonexistent) should return false")
-		}
-	})
-}
-
 func TestResolveProviderFull(t *testing.T) {
 	t.Run("builtin with struct overrides", func(t *testing.T) {
 		cfg := DefaultConfig()

@@ -20,8 +20,6 @@ type mockGit struct {
 	pushSetUp        string
 	pushSetUpErr     error
 	resetErr         error
-	log              string
-	logErr           error
 	logOneline       string
 	logOnelineErr    error
 	statusShort      string
@@ -47,7 +45,6 @@ func (m mockGit) Commit(msg string) (string, error)          { return m.commitOu
 func (m mockGit) Push() (string, error)                      { return m.pushOut, m.pushErr }
 func (m mockGit) PushSetUpstream() (string, error)           { return m.pushSetUp, m.pushSetUpErr }
 func (m mockGit) Reset() error                               { return m.resetErr }
-func (m mockGit) Log() (string, error)                       { return m.log, m.logErr }
 func (m mockGit) LogOneline() (string, error)                { return m.logOneline, m.logOnelineErr }
 func (m mockGit) StatusShort() (string, error)               { return m.statusShort, m.statusShortErr }
 func (m mockGit) CurrentBranch() (string, error)             { return m.currentBranch, m.currentBranchErr }

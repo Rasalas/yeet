@@ -16,7 +16,6 @@ type Git interface {
 	Push() (string, error)
 	PushSetUpstream() (string, error)
 	Reset() error
-	Log() (string, error)
 	LogOneline() (string, error)
 	StatusShort() (string, error)
 	CurrentBranch() (string, error)
@@ -64,10 +63,6 @@ func (ExecGit) Push() (string, error) {
 func (ExecGit) Reset() error {
 	_, err := run("reset")
 	return err
-}
-
-func (ExecGit) Log() (string, error) {
-	return run("log", "--oneline", "--graph", "--decorate", "-20")
 }
 
 func (ExecGit) LogOneline() (string, error) {
@@ -145,7 +140,6 @@ func Commit(message string) (string, error)  { return Default.Commit(message) }
 func Push() (string, error)                  { return Default.Push() }
 func PushSetUpstream() (string, error)       { return Default.PushSetUpstream() }
 func Reset() error                           { return Default.Reset() }
-func Log() (string, error)                   { return Default.Log() }
 func LogOneline() (string, error)            { return Default.LogOneline() }
 func HasStagedChanges() bool                 { return Default.HasStagedChanges() }
 func StatusShort() (string, error)           { return Default.StatusShort() }
