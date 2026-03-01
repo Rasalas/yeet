@@ -77,6 +77,10 @@ Pressing Escape cancels safely — if yeet auto-staged, it unstages. If you stag
 | `yeet prompt` | Edit the AI system prompt in `$EDITOR` |
 | `yeet prompt show` | Print the current prompt |
 | `yeet prompt reset` | Reset prompt to default |
+| `yeet eval plan` | Estimate eval sample + cost (no API calls) |
+| `yeet eval generate` | Generate bounded A/B candidates from historical runs |
+| `yeet eval judge` | Blind-judge A/B candidates (`A/B/tie/both bad`) |
+| `yeet eval report` | Show win-rate, cost, latency, and phrase-hit stats |
 | `yeet log` | Pretty `git log --oneline --graph` |
 
 ## Setup
@@ -169,4 +173,33 @@ The system prompt lives at `~/.config/yeet/prompt.txt` and is created automatica
 yeet prompt         # Edit in $EDITOR
 yeet prompt show    # View current prompt
 yeet prompt reset   # Restore default
+```
+
+## Eval (separate from commit flow)
+
+`yeet eval` is an explicit, opt-in workflow for comparing prompt/model variants on real historical runs.
+
+- Normal `yeet` commits stay fast — no extra model calls during commit.
+- Run data is stored locally in SQLite: `~/.local/share/yeet/yeet.db`
+- No upload/telemetry by default.
+- Requires `sqlite3` to be available on `PATH` for eval commands/storage.
+- More detail: [`docs/eval.md`](docs/eval.md)
+
+Typical flow:
+
+```sh
+yeet eval plan --sample 20 --batch-size 5 --max-cost-usd 1.00
+yeet eval generate --sample 20 --batch-size 5 --max-cost-usd 1.00 --prompt-file ./prompt-v2.txt
+yeet eval judge --variant 3
+yeet eval report --variant 3
+```
+
+Useful filters:
+
+```sh
+# Evaluate only runs where baseline output contains a phrase you want to remove
+yeet eval generate --contains "for improved user" --sample 30 --batch-size 8
+
+# Focus on runs where you had to edit the AI output
+yeet eval generate --edited-only --sample 30 --batch-size 8
 ```

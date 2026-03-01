@@ -23,7 +23,7 @@ var pricing = map[string]ModelPricing{
 	"o4-mini":      {1.10, 4.40},
 
 	// Google
-	"gemini-2.5-flash":      {0.15, 0.60},
+	"gemini-2.5-flash":       {0.15, 0.60},
 	"gemini-3-flash-preview": {0.50, 3.00},
 
 	// Groq
@@ -40,14 +40,31 @@ var pricing = map[string]ModelPricing{
 // Cost returns the estimated cost in USD and a human-readable string.
 // Returns ("", false) if the model has no known pricing (e.g. ollama).
 func (u Usage) Cost() (string, bool) {
-	p, ok := pricing[u.Model]
+	cost, ok := EstimateCost(u.Model, u.InputTokens, u.OutputTokens)
 	if !ok {
 		return "", false
 	}
-	cost := float64(u.InputTokens)*p.InputPerMillion/1_000_000 +
-		float64(u.OutputTokens)*p.OutputPerMillion/1_000_000
 
 	return fmt.Sprintf("$%.4f", cost), true
+}
+
+// CostUSD returns the estimated cost in USD.
+// Returns (0, false) if the model has no known pricing.
+func (u Usage) CostUSD() (float64, bool) {
+	return EstimateCost(u.Model, u.InputTokens, u.OutputTokens)
+}
+
+// EstimateCost returns the estimated USD cost for a model and token counts.
+// Returns (0, false) if the model has no known pricing.
+func EstimateCost(model string, inputTokens, outputTokens int) (float64, bool) {
+	p, ok := pricing[model]
+	if !ok {
+		return 0, false
+	}
+	cost := float64(inputTokens)*p.InputPerMillion/1_000_000 +
+		float64(outputTokens)*p.OutputPerMillion/1_000_000
+
+	return cost, true
 }
 
 // FormatTokens returns a short token summary like "3.1k in / 28 out".
@@ -78,4 +95,10 @@ func ModelInputCost(model string) float64 {
 // Input and output are costs per million tokens in USD.
 func SetPricing(model string, input, output float64) {
 	pricing[model] = ModelPricing{input, output}
+}
+
+// ModelPricingFor returns pricing for a model.
+func ModelPricingFor(model string) (ModelPricing, bool) {
+	p, ok := pricing[model]
+	return p, ok
 }

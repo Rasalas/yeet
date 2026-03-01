@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/rasalas/yeet/internal/ai"
 	"github.com/rasalas/yeet/internal/config"
@@ -74,12 +75,14 @@ func runYeet(cmd *cobra.Command, args []string) error {
 	var message string
 	var usage *ai.Usage
 	streamed := false
+	var capture *commitRunCapture
+	editedByUser := false
 	if messageFlag != "" {
 		message = messageFlag
 	} else if len(args) > 0 {
 		message = strings.Join(args, " ")
 	} else {
-		message, usage, streamed, err = generateOrFallback()
+		message, usage, streamed, capture, err = generateOrFallback()
 		if err != nil {
 			return err
 		}
@@ -131,19 +134,27 @@ func runYeet(cmd *cobra.Command, args []string) error {
 				return nil
 			case term.ActionEdit:
 				term.ClearLines(linesToClear)
+				prev := message
 				edited, err := term.EditLine(message)
 				if err != nil {
 					return err
 				}
 				message = edited
+				if message != prev {
+					editedByUser = true
+				}
 				continue
 			case term.ActionEditExternal:
 				term.ClearLines(linesToClear)
+				prev := message
 				edited, err := term.EditExternal(message)
 				if err != nil {
 					fmt.Printf("\n  Editor failed: %v\n", err)
 				} else {
 					message = edited
+					if message != prev {
+						editedByUser = true
+					}
 				}
 				continue
 			case term.ActionConfirm:
@@ -159,6 +170,14 @@ func runYeet(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("commit failed: %s", out)
 	}
 	fmt.Printf("  %s✓%s %s\n", term.Green, term.Reset, firstLine(out))
+
+	if capture != nil && usage != nil {
+		userAction := "accepted"
+		if editedByUser {
+			userAction = "edited"
+		}
+		_ = saveCommitRunCapture(*capture, usage, message, userAction, localFlag)
+	}
 
 	// 7. Push (unless local-only)
 	if localFlag {
@@ -202,7 +221,7 @@ func printMessage(message string) int {
 	return plainMessageClearLines(message, width)
 }
 
-func generateOrFallback() (string, *ai.Usage, bool, error) {
+func generateOrFallback() (string, *ai.Usage, bool, *commitRunCapture, error) {
 	cfg, err := config.Load()
 	if err != nil {
 		cfg = config.DefaultConfig()
@@ -220,7 +239,7 @@ func generateOrFallback() (string, *ai.Usage, bool, error) {
 
 		yes, err := term.WaitForYesNo()
 		if err != nil {
-			return "", nil, false, err
+			return "", nil, false, nil, err
 		}
 
 		if yes {
@@ -235,17 +254,17 @@ func generateOrFallback() (string, *ai.Usage, bool, error) {
 			fmt.Println("  Enter commit message:")
 			msg, err := promptForMessage("")
 			if err != nil {
-				return "", nil, false, err
+				return "", nil, false, nil, err
 			}
 			fmt.Printf("\n  tip: run `yeet auth set %s` to enable AI commit messages\n\n", cfg.Provider)
-			return msg, nil, false, nil
+			return msg, nil, false, nil, nil
 		}
 	}
 
 	// AI generation — collect git context
 	diff, err := git.DiffCached()
 	if err != nil {
-		return "", nil, false, fmt.Errorf("failed to get diff: %w", err)
+		return "", nil, false, nil, fmt.Errorf("failed to get diff: %w", err)
 	}
 
 	branch, _ := git.CurrentBranch()
@@ -261,36 +280,52 @@ func generateOrFallback() (string, *ai.Usage, bool, error) {
 
 	// Try streaming if supported
 	if sp, ok := provider.(ai.StreamingProvider); ok {
+		start := time.Now()
 		message, usage, err := generateStreaming(sp, ctx)
+		latencyMs := time.Since(start).Milliseconds()
 		if err != nil {
 			term.ClearLine()
 			fmt.Printf("  %s%v%s\n\n", term.Red, err, term.Reset)
 			fmt.Println("  Enter commit message manually:")
 			msg, editErr := promptForMessage(message)
 			if editErr != nil {
-				return "", nil, false, editErr
+				return "", nil, false, nil, editErr
 			}
-			return msg, nil, false, nil
+			return msg, nil, false, nil, nil
 		}
-		return message, &usage, true, nil
+		return message, &usage, true, &commitRunCapture{
+			Context:   ctx,
+			Prompt:    ctx.EffectivePrompt(),
+			Provider:  cfg.Provider,
+			Suggested: message,
+			LatencyMS: latencyMs,
+		}, nil
 	}
 
 	// Non-streaming fallback
 	fmt.Printf("  %sGenerating commit message...%s", term.Dim, term.Reset)
+	start := time.Now()
 	message, usage, err := provider.GenerateCommitMessage(ctx)
+	latencyMs := time.Since(start).Milliseconds()
 	if err != nil {
 		fmt.Println(" failed")
 		fmt.Printf("  %s%v%s\n\n", term.Red, err, term.Reset)
 		fmt.Println("  Enter commit message manually:")
 		msg, editErr := promptForMessage("")
 		if editErr != nil {
-			return "", nil, false, editErr
+			return "", nil, false, nil, editErr
 		}
-		return msg, nil, false, nil
+		return msg, nil, false, nil, nil
 	}
 
 	term.ClearLine()
-	return message, &usage, false, nil
+	return message, &usage, false, &commitRunCapture{
+		Context:   ctx,
+		Prompt:    ctx.EffectivePrompt(),
+		Provider:  cfg.Provider,
+		Suggested: message,
+		LatencyMS: latencyMs,
+	}, nil
 }
 
 func generateStreaming(sp ai.StreamingProvider, ctx ai.CommitContext) (string, ai.Usage, error) {
