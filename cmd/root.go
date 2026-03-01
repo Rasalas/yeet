@@ -15,11 +15,13 @@ import (
 var (
 	messageFlag string
 	yesFlag     bool
+	localFlag   bool
 )
 
 func init() {
 	rootCmd.Flags().StringVarP(&messageFlag, "message", "m", "", "Commit message (use when message collides with a subcommand name)")
 	rootCmd.PersistentFlags().BoolVarP(&yesFlag, "yes", "y", false, "Skip confirmation prompts and accept defaults")
+	rootCmd.Flags().BoolVarP(&localFlag, "local", "l", false, "Commit locally without pushing")
 }
 
 var rootCmd = &cobra.Command{
@@ -157,17 +159,21 @@ func runYeet(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Printf("  %s✓%s %s\n", term.Green, term.Reset, firstLine(out))
 
-	// 7. Push
-	pushOut, err := git.Push()
-	if err != nil {
-		pushOut, err = git.PushSetUpstream()
+	// 7. Push (unless local-only)
+	if localFlag {
+		fmt.Printf("  %s✓%s %slocal commit only%s (skipped push)\n", term.Green, term.Reset, term.Dim, term.Reset)
+	} else {
+		pushOut, err := git.Push()
 		if err != nil {
-			return fmt.Errorf("push failed: %s", pushOut)
+			pushOut, err = git.PushSetUpstream()
+			if err != nil {
+				return fmt.Errorf("push failed: %s", pushOut)
+			}
 		}
-	}
 
-	branch, _ := git.CurrentBranch()
-	fmt.Printf("  %s✓%s %spushed to%s origin/%s\n", term.Green, term.Reset, term.Dim, term.Reset, branch)
+		branch, _ := git.CurrentBranch()
+		fmt.Printf("  %s✓%s %spushed to%s origin/%s\n", term.Green, term.Reset, term.Dim, term.Reset, branch)
+	}
 
 	if usage != nil && usage.InputTokens > 0 {
 		costLine := fmt.Sprintf("%s · %s", usage.FormatTokens(), usage.Model)

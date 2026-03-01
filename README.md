@@ -41,6 +41,7 @@ go build -o yeet .
 yeet                     # AI generates the commit message
 yeet fix typo in readme  # Use your own message
 yeet -m "config"         # -m flag for words that collide with subcommands
+yeet -l                  # Local commit only (skip push)
 ```
 
 **What happens:**
@@ -49,7 +50,7 @@ yeet -m "config"         # -m flag for words that collide with subcommands
 2. Shows diff stat (insertions in green, deletions in red)
 3. Generates commit message (AI with streaming) or uses your message
 4. You review — Enter to commit, `e` to edit inline, `E` to open `$EDITOR`, Esc to cancel
-5. `git commit` + `git push`
+5. `git commit` + `git push` (or only commit with `-l`)
 
 Selective staging works too:
 
@@ -65,6 +66,7 @@ Pressing Escape cancels safely — if yeet auto-staged, it unstages. If you stag
 | Command | Description |
 |---------|-------------|
 | `yeet [message...]` | Stage, commit, push |
+| `yeet -l [message...]` | Stage, commit locally (no push) |
 | `yeet config` | Full-screen TUI for provider/model/keys |
 | `yeet config edit` | Open `config.toml` in `$EDITOR` |
 | `yeet auth` | Show API key status |
