@@ -36,7 +36,13 @@ type ExecGit struct{}
 func run(args ...string) (string, error) {
 	cmd := exec.Command("git", args...)
 	out, err := cmd.CombinedOutput()
-	return strings.TrimSpace(string(out)), err
+	return normalizeOutput(out), err
+}
+
+func normalizeOutput(out []byte) string {
+	// Preserve leading whitespace (e.g. git --stat indentation),
+	// but strip trailing line endings from command output.
+	return strings.TrimRight(string(out), "\r\n")
 }
 
 func (ExecGit) StageAll() error {
@@ -133,19 +139,19 @@ func (ExecGit) HasUpstream() bool {
 
 // Free functions delegate to Default for backward compatibility.
 
-func StageAll() error                        { return Default.StageAll() }
-func DiffStat() (string, error)              { return Default.DiffStat() }
-func DiffCached() (string, error)            { return Default.DiffCached() }
-func Commit(message string) (string, error)  { return Default.Commit(message) }
-func Push() (string, error)                  { return Default.Push() }
-func PushSetUpstream() (string, error)       { return Default.PushSetUpstream() }
-func Reset() error                           { return Default.Reset() }
-func LogOneline() (string, error)            { return Default.LogOneline() }
-func HasStagedChanges() bool                 { return Default.HasStagedChanges() }
-func StatusShort() (string, error)           { return Default.StatusShort() }
-func CurrentBranch() (string, error)         { return Default.CurrentBranch() }
-func DefaultBranch() (string, error)         { return Default.DefaultBranch() }
-func LogRange(base string) (string, error)   { return Default.LogRange(base) }
-func DiffRange(base string) (string, error)  { return Default.DiffRange(base) }
+func StageAll() error                           { return Default.StageAll() }
+func DiffStat() (string, error)                 { return Default.DiffStat() }
+func DiffCached() (string, error)               { return Default.DiffCached() }
+func Commit(message string) (string, error)     { return Default.Commit(message) }
+func Push() (string, error)                     { return Default.Push() }
+func PushSetUpstream() (string, error)          { return Default.PushSetUpstream() }
+func Reset() error                              { return Default.Reset() }
+func LogOneline() (string, error)               { return Default.LogOneline() }
+func HasStagedChanges() bool                    { return Default.HasStagedChanges() }
+func StatusShort() (string, error)              { return Default.StatusShort() }
+func CurrentBranch() (string, error)            { return Default.CurrentBranch() }
+func DefaultBranch() (string, error)            { return Default.DefaultBranch() }
+func LogRange(base string) (string, error)      { return Default.LogRange(base) }
+func DiffRange(base string) (string, error)     { return Default.DiffRange(base) }
 func DiffStatRange(base string) (string, error) { return Default.DiffStatRange(base) }
-func HasUpstream() bool                      { return Default.HasUpstream() }
+func HasUpstream() bool                         { return Default.HasUpstream() }

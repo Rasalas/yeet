@@ -2,6 +2,7 @@ package git
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -37,22 +38,24 @@ type mockGit struct {
 	hasUpstream      bool
 }
 
-func (m mockGit) HasStagedChanges() bool                     { return m.hasStagedChanges }
-func (m mockGit) StageAll() error                            { return m.stageAllErr }
-func (m mockGit) DiffStat() (string, error)                  { return m.diffStat, m.diffStatErr }
-func (m mockGit) DiffCached() (string, error)                { return m.diffCached, m.diffCachedErr }
-func (m mockGit) Commit(msg string) (string, error)          { return m.commitOut, m.commitErr }
-func (m mockGit) Push() (string, error)                      { return m.pushOut, m.pushErr }
-func (m mockGit) PushSetUpstream() (string, error)           { return m.pushSetUp, m.pushSetUpErr }
-func (m mockGit) Reset() error                               { return m.resetErr }
-func (m mockGit) LogOneline() (string, error)                { return m.logOneline, m.logOnelineErr }
-func (m mockGit) StatusShort() (string, error)               { return m.statusShort, m.statusShortErr }
-func (m mockGit) CurrentBranch() (string, error)             { return m.currentBranch, m.currentBranchErr }
-func (m mockGit) DefaultBranch() (string, error)             { return m.defaultBranch, m.defaultBranchErr }
-func (m mockGit) LogRange(base string) (string, error)       { return m.logRange, m.logRangeErr }
-func (m mockGit) DiffRange(base string) (string, error)      { return m.diffRange, m.diffRangeErr }
-func (m mockGit) DiffStatRange(base string) (string, error)  { return m.diffStatRange, m.diffStatRangeErr }
-func (m mockGit) HasUpstream() bool                          { return m.hasUpstream }
+func (m mockGit) HasStagedChanges() bool                { return m.hasStagedChanges }
+func (m mockGit) StageAll() error                       { return m.stageAllErr }
+func (m mockGit) DiffStat() (string, error)             { return m.diffStat, m.diffStatErr }
+func (m mockGit) DiffCached() (string, error)           { return m.diffCached, m.diffCachedErr }
+func (m mockGit) Commit(msg string) (string, error)     { return m.commitOut, m.commitErr }
+func (m mockGit) Push() (string, error)                 { return m.pushOut, m.pushErr }
+func (m mockGit) PushSetUpstream() (string, error)      { return m.pushSetUp, m.pushSetUpErr }
+func (m mockGit) Reset() error                          { return m.resetErr }
+func (m mockGit) LogOneline() (string, error)           { return m.logOneline, m.logOnelineErr }
+func (m mockGit) StatusShort() (string, error)          { return m.statusShort, m.statusShortErr }
+func (m mockGit) CurrentBranch() (string, error)        { return m.currentBranch, m.currentBranchErr }
+func (m mockGit) DefaultBranch() (string, error)        { return m.defaultBranch, m.defaultBranchErr }
+func (m mockGit) LogRange(base string) (string, error)  { return m.logRange, m.logRangeErr }
+func (m mockGit) DiffRange(base string) (string, error) { return m.diffRange, m.diffRangeErr }
+func (m mockGit) DiffStatRange(base string) (string, error) {
+	return m.diffStatRange, m.diffStatRangeErr
+}
+func (m mockGit) HasUpstream() bool { return m.hasUpstream }
 
 func TestFreeFunctionsDelegateToDefault(t *testing.T) {
 	original := Default
@@ -138,5 +141,32 @@ func TestFreeFunctionsErrorDelegation(t *testing.T) {
 	_, err = DefaultBranch()
 	if err == nil {
 		t.Error("DefaultBranch: expected error")
+	}
+}
+
+func TestNormalizeOutputPreservesLeadingWhitespace(t *testing.T) {
+	in := []byte(" README.md |  4 ++-\n cmd/root.go | 22 +++++++++------\n")
+	got := normalizeOutput(in)
+
+	lines := strings.Split(got, "\n")
+	if len(lines) != 2 {
+		t.Fatalf("expected 2 lines, got %d (%q)", len(lines), got)
+	}
+	if !strings.HasPrefix(lines[0], " ") {
+		t.Fatalf("first line lost leading whitespace: %q", lines[0])
+	}
+	if !strings.HasPrefix(lines[1], " ") {
+		t.Fatalf("second line lost leading whitespace: %q", lines[1])
+	}
+	if strings.HasSuffix(got, "\n") {
+		t.Fatalf("expected trailing newline to be trimmed: %q", got)
+	}
+}
+
+func TestNormalizeOutputTrimsCRLF(t *testing.T) {
+	in := []byte("value\r\n")
+	got := normalizeOutput(in)
+	if got != "value" {
+		t.Fatalf("normalizeOutput() = %q, want %q", got, "value")
 	}
 }
