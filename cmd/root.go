@@ -10,6 +10,7 @@ import (
 	"github.com/rasalas/yeet/internal/git"
 	"github.com/rasalas/yeet/internal/term"
 	"github.com/spf13/cobra"
+	goterm "golang.org/x/term"
 )
 
 var (
@@ -87,14 +88,14 @@ func runYeet(cmd *cobra.Command, args []string) error {
 	// 4. Confirm loop (show message, allow edit) — skip with -y
 	if yesFlag {
 		if streamed && term.MsgBg != "" {
-			term.ClearLines(2)
+			term.ClearLines(streamedPreviewClearLines(message, terminalWidth()))
 		}
 		printMessage(message)
 	} else {
 		showMessage := !streamed
 		linesToClear := 3
 		if streamed && term.MsgBg != "" {
-			term.ClearLines(2)
+			term.ClearLines(streamedPreviewClearLines(message, terminalWidth()))
 			showMessage = true
 		}
 		for {
@@ -188,15 +189,17 @@ func runYeet(cmd *cobra.Command, args []string) error {
 
 // printMessage displays the commit message card and returns the number of lines used.
 func printMessage(message string) int {
+	width := terminalWidth()
+
 	if term.MsgBg != "" {
 		pad := strings.Repeat(" ", len([]rune(message))+3)
 		fmt.Printf("  %s%s%s\n", term.MsgBar, pad, term.Reset)
 		fmt.Printf("  %s%s%s\n", term.MsgOpen, message, term.MsgClose)
 		fmt.Printf("  %s%s%s\n\n", term.MsgBar, pad, term.Reset)
-		return 5
+		return messageCardClearLines(message, width)
 	}
 	fmt.Printf("  %s%s%s\n\n", term.MsgOpen, message, term.MsgClose)
-	return 3
+	return plainMessageClearLines(message, width)
 }
 
 func generateOrFallback() (string, *ai.Usage, bool, error) {
@@ -324,4 +327,46 @@ func firstLine(s string) string {
 		return s[:i]
 	}
 	return s
+}
+
+func terminalWidth() int {
+	width, _, err := goterm.GetSize(int(os.Stdout.Fd()))
+	if err != nil || width <= 0 {
+		return 80
+	}
+	return width
+}
+
+func wrappedLineCount(columns, width int) int {
+	if width <= 0 {
+		width = 80
+	}
+	if columns <= 0 {
+		return 1
+	}
+	return (columns + width - 1) / width
+}
+
+func messageCardRows(message string, width int) int {
+	// Visible columns for card rows:
+	// "  " indent + "▎ " prefix + message + "  " suffix = len(message)+6
+	return wrappedLineCount(len([]rune(message))+6, width)
+}
+
+func streamedPreviewClearLines(message string, width int) int {
+	// Wrapped preview rows + current line after spinner's trailing newline.
+	return messageCardRows(message, width) + 1
+}
+
+func messageCardClearLines(message string, width int) int {
+	// 3 wrapped card rows + one blank line + action hint line.
+	rows := messageCardRows(message, width)
+	return rows*3 + 2
+}
+
+func plainMessageClearLines(message string, width int) int {
+	// Visible columns for plain row: "  " indent + "› " + message.
+	rows := wrappedLineCount(len([]rune(message))+4, width)
+	// Message rows + one blank line + action hint line.
+	return rows + 2
 }

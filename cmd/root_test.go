@@ -102,3 +102,54 @@ func TestRunYeetWithLocalFlagSkipsPush(t *testing.T) {
 		t.Fatal("expected push --set-upstream not to be called when --local is set")
 	}
 }
+
+func TestWrappedLineCount(t *testing.T) {
+	tests := []struct {
+		name    string
+		columns int
+		width   int
+		want    int
+	}{
+		{name: "single row", columns: 10, width: 80, want: 1},
+		{name: "exact width", columns: 20, width: 20, want: 1},
+		{name: "wraps once", columns: 21, width: 20, want: 2},
+		{name: "zero columns", columns: 0, width: 20, want: 1},
+		{name: "invalid width fallback", columns: 81, width: 0, want: 2},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := wrappedLineCount(tt.columns, tt.width); got != tt.want {
+				t.Fatalf("wrappedLineCount(%d, %d) = %d, want %d", tt.columns, tt.width, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestMessageCardAndStreamLineCalculations(t *testing.T) {
+	width := 20
+	message := "123456789012345" // len = 15
+
+	// Card row columns = len+6 => 21 columns at width 20 => 2 wrapped rows.
+	if got := messageCardRows(message, width); got != 2 {
+		t.Fatalf("messageCardRows() = %d, want %d", got, 2)
+	}
+
+	// 3 card rows, each wrapping to 2 lines => 6, plus blank + hint => 8.
+	if got := messageCardClearLines(message, width); got != 8 {
+		t.Fatalf("messageCardClearLines() = %d, want %d", got, 8)
+	}
+
+	// Streamed preview wrapped rows (2) + current line (1) => 3.
+	if got := streamedPreviewClearLines(message, width); got != 3 {
+		t.Fatalf("streamedPreviewClearLines() = %d, want %d", got, 3)
+	}
+}
+
+func TestPlainMessageClearLines(t *testing.T) {
+	width := 10
+	message := "1234567" // columns = len+4 = 11 => 2 rows
+	if got := plainMessageClearLines(message, width); got != 4 {
+		t.Fatalf("plainMessageClearLines() = %d, want %d", got, 4)
+	}
+}
