@@ -230,58 +230,7 @@ func parsePR(raw string) (title, body string) {
 // displayPRPreview shows the PR title and body inside a single card.
 // Returns the number of terminal lines used (for ClearLines).
 func displayPRPreview(title, body string) int {
-	lines := 0
-
-	// Collect all content lines: title + blank + body
-	var content []string
-	content = append(content, "# "+title)
-	if body != "" {
-		content = append(content, "")
-		content = append(content, strings.Split(body, "\n")...)
-	}
-
-	// Find the widest line for padding
-	maxWidth := 0
-	for _, line := range content {
-		if w := len([]rune(line)); w > maxWidth {
-			maxWidth = w
-		}
-	}
-
-	if term.MsgBg != "" {
-		pad := strings.Repeat(" ", maxWidth+3)
-		// Top border
-		fmt.Printf("  %s%s%s\n", term.MsgBar, pad, term.Reset)
-		lines++
-		// Content lines
-		for i, line := range content {
-			rpad := strings.Repeat(" ", maxWidth-len([]rune(line)))
-			if i == 0 {
-				// Title: bold — MsgOpen = bar+1space, MsgClose = 2spaces+reset
-				fmt.Printf("  %s%s%s%s\n", term.MsgOpen, line, rpad, term.MsgClose)
-			} else {
-				// Body: dim on card bg — bar+1space left, 2spaces right
-				fmt.Printf("  %s%s %s%s  %s\n", term.MsgBar, term.Dim, line, rpad, term.Reset)
-			}
-			lines++
-		}
-		// Bottom border
-		fmt.Printf("  %s%s%s\n", term.MsgBar, pad, term.Reset)
-		lines++
-	} else {
-		// NO_COLOR fallback
-		for i, line := range content {
-			if i == 0 {
-				fmt.Printf("  %s%s%s\n", term.MsgOpen, line, term.MsgClose)
-			} else {
-				fmt.Printf("  %s\n", line)
-			}
-			lines++
-		}
-	}
-
-	fmt.Println()
-	lines++ // blank line before keyhints
-	lines++ // keyhint line itself
+	lines := term.DisplayCard(title, body)
+	lines++ // keyhint line
 	return lines
 }
