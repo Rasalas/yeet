@@ -1,9 +1,11 @@
 package cmd
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/rasalas/yeet/internal/git"
+	"github.com/spf13/cobra"
 )
 
 type runYeetMockGit struct {
@@ -58,6 +60,30 @@ func TestFirstLine(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("firstLine(%q) = %q, want %q", tt.input, got, tt.want)
 		}
+	}
+}
+
+func TestRootCommandAcceptsPositionalMessage(t *testing.T) {
+	origRunE := rootCmd.RunE
+	rootCmd.SetArgs(nil)
+	defer func() {
+		rootCmd.RunE = origRunE
+		rootCmd.SetArgs(nil)
+	}()
+
+	var got []string
+	rootCmd.RunE = func(cmd *cobra.Command, args []string) error {
+		got = append([]string(nil), args...)
+		return nil
+	}
+
+	want := []string{"feat(gui): update svelte ui to html version"}
+	rootCmd.SetArgs(want)
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("rootCmd.Execute() returned error: %v", err)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("root command args = %q, want %q", got, want)
 	}
 }
 

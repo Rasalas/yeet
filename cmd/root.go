@@ -30,6 +30,7 @@ var rootCmd = &cobra.Command{
 	Use:   "yeet [message...]",
 	Short: "Git commit & push in one command",
 	Long:  "Stage all changes, generate or use a commit message, and push — all in one step.",
+	Args:  cobra.ArbitraryArgs,
 	RunE:  runYeet,
 }
 
