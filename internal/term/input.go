@@ -89,73 +89,42 @@ func EditLine(initial string) (string, error) {
 
 	line := []rune(initial)
 	cursor := len(line)
-	hasCard := MsgBg != ""
-	renderedLines := 0
-	linesBelowCursor := 0
+	rendered := false
 
 	redraw := func() {
-		if renderedLines > 0 {
-			if linesBelowCursor > 0 {
-				fmt.Printf("\033[%dB", linesBelowCursor)
-			}
-			ClearLines(renderedLines)
+		if rendered {
+			ClearLines(1)
 		}
 
-		width := TerminalWidth()
-		text := string(line)
-		if hasCard {
-			rows := wrapRunes(text, messageContentWidth(width))
-			maxWidth := maxLineWidth(rows)
-			pad := strings.Repeat(" ", maxWidth+3)
-
-			fmt.Printf("  %s%s%s", MsgBar, pad, Reset)
-			fmt.Print("\n")
-			for i, row := range rows {
-				rpad := strings.Repeat(" ", maxWidth-len([]rune(row)))
-				fmt.Printf("  %s%s%s%s", MsgOpen, row, rpad, MsgClose)
-				if i < len(rows)-1 {
-					fmt.Print("\n")
-				}
-			}
-			fmt.Print("\n")
-			fmt.Printf("  %s%s%s", MsgBar, pad, Reset)
-
-			cursorRow, cursorCol := wrappedCursorPosition(cursor, len(line), messageContentWidth(width))
-			renderedLines = len(rows) + 2
-			linesBelowCursor = len(rows) - cursorRow
-			if linesBelowCursor > 0 {
-				fmt.Printf("\033[%dA", linesBelowCursor)
-			}
-			fmt.Printf("\r\033[%dC", 4+cursorCol)
-		} else {
-			rows := wrapRunes(text, plainMessageContentWidth(width))
-			for i, row := range rows {
-				fmt.Printf("  %s%s%s", MsgOpen, row, MsgClose)
-				if i < len(rows)-1 {
-					fmt.Print("\n")
-				}
-			}
-
-			cursorRow, cursorCol := wrappedCursorPosition(cursor, len(line), plainMessageContentWidth(width))
-			renderedLines = len(rows)
-			linesBelowCursor = len(rows) - 1 - cursorRow
-			if linesBelowCursor > 0 {
-				fmt.Printf("\033[%dA", linesBelowCursor)
-			}
-			fmt.Printf("\r\033[%dC", 4+cursorCol)
+		viewWidth := plainMessageContentWidth(TerminalWidth())
+		start := 0
+		if cursor > viewWidth {
+			start = cursor - viewWidth
 		}
+		if start > len(line) {
+			start = len(line)
+		}
+		end := start + viewWidth
+		if end > len(line) {
+			end = len(line)
+			if end-start < viewWidth && end > viewWidth {
+				start = end - viewWidth
+			}
+		}
+		visible := string(line[start:end])
+		cursorCol := cursor - start
+
+		fmt.Printf("  %s%s%s", MsgOpen, visible, MsgClose)
+		fmt.Printf("\r\033[%dC", 4+cursorCol)
+		rendered = true
 	}
 
 	clearEdit := func() {
-		if renderedLines == 0 {
+		if !rendered {
 			return
 		}
-		if linesBelowCursor > 0 {
-			fmt.Printf("\033[%dB", linesBelowCursor)
-		}
-		ClearLines(renderedLines)
-		renderedLines = 0
-		linesBelowCursor = 0
+		ClearLines(1)
+		rendered = false
 	}
 
 	redraw()
