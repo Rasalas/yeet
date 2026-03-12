@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/rasalas/yeet/internal/git"
+	"github.com/rasalas/yeet/internal/term"
 	"github.com/spf13/cobra"
 )
 
@@ -156,26 +157,46 @@ func TestMessageCardAndStreamLineCalculations(t *testing.T) {
 	width := 20
 	message := "123456789012345" // len = 15
 
+	origMsgBg := term.MsgBg
+	term.MsgBg = "bg"
+	defer func() { term.MsgBg = origMsgBg }()
+
 	if got := messageCardRows(message, width); got != 2 {
 		t.Fatalf("messageCardRows() = %d, want %d", got, 2)
-	}
-
-	// Top + 2 wrapped rows + bottom + blank line = 5.
-	if got := messageCardClearLines(message, width); got != 5 {
-		t.Fatalf("messageCardClearLines() = %d, want %d", got, 5)
 	}
 
 	// Top + 2 wrapped rows + bottom + current line below = 5.
 	if got := streamedPreviewClearLines(message, width); got != 5 {
 		t.Fatalf("streamedPreviewClearLines() = %d, want %d", got, 5)
 	}
+
+	// Top + 2 wrapped rows + bottom + blank line, plus current line below = 6.
+	if got := messageCardClearLines(message, width); got != 6 {
+		t.Fatalf("messageCardClearLines() = %d, want %d", got, 6)
+	}
 }
 
 func TestPlainMessageClearLines(t *testing.T) {
 	width := 10
-	message := "1234567" // width-4 = 6 => 2 rows + blank = 3
-	if got := plainMessageClearLines(message, width); got != 3 {
-		t.Fatalf("plainMessageClearLines() = %d, want %d", got, 3)
+	origMsgBg := term.MsgBg
+	term.MsgBg = ""
+	defer func() { term.MsgBg = origMsgBg }()
+
+	message := "1234567" // width-4 = 6 => 2 rows + blank + current line = 4
+	if got := plainMessageClearLines(message, width); got != 4 {
+		t.Fatalf("plainMessageClearLines() = %d, want %d", got, 4)
+	}
+}
+
+func TestStreamedPreviewClearLinesPlain(t *testing.T) {
+	width := 10
+	origMsgBg := term.MsgBg
+	term.MsgBg = ""
+	defer func() { term.MsgBg = origMsgBg }()
+
+	message := "1234567" // width-4 = 6 => 2 rows + current line below = 3
+	if got := streamedPreviewClearLines(message, width); got != 3 {
+		t.Fatalf("streamedPreviewClearLines() = %d, want %d", got, 3)
 	}
 }
 
@@ -189,5 +210,11 @@ func TestPrintHintActionsWraps(t *testing.T) {
 
 	if got := printHintActions(actions, width); got != 3 {
 		t.Fatalf("printHintActions() = %d, want %d", got, 3)
+	}
+}
+
+func TestClearLinesForRenderedBlocks(t *testing.T) {
+	if got := clearLinesForRenderedBlocks(5, 2); got != 8 {
+		t.Fatalf("clearLinesForRenderedBlocks() = %d, want %d", got, 8)
 	}
 }

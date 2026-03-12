@@ -141,22 +141,10 @@ func runPR(cmd *cobra.Command, args []string) error {
 	if yesFlag {
 		displayPRPreview(title, body)
 	} else {
-		showPRPreview := true
 		linesToClear := 3
 		for {
 			width := term.TerminalWidth()
-			if showPRPreview {
-				linesToClear = displayPRPreview(title, body)
-			} else {
-				showPRPreview = true
-			}
-
-			linesToClear += printHintActions([]hintAction{
-				{key: "enter", desc: "create"},
-				{key: "e", desc: "edit title"},
-				{key: "E", desc: "editor"},
-				{key: "q", desc: "cancel"},
-			}, width)
+			linesToClear = renderPRConfirmation(title, body, width)
 
 			action, err := term.WaitForAction()
 			if err != nil {
@@ -169,7 +157,7 @@ func runPR(cmd *cobra.Command, args []string) error {
 				return nil
 
 			case term.ActionEdit:
-				term.ClearLines(linesToClear + 1)
+				term.ClearLines(linesToClear)
 				edited, err := term.EditLine(title)
 				if err != nil {
 					return err
@@ -178,7 +166,7 @@ func runPR(cmd *cobra.Command, args []string) error {
 				continue
 
 			case term.ActionEditExternal:
-				term.ClearLines(linesToClear + 1)
+				term.ClearLines(linesToClear)
 				full := title + "\n\n" + body
 				edited, err := term.EditExternal(full)
 				if err != nil {
@@ -231,4 +219,15 @@ func parsePR(raw string) (title, body string) {
 // Returns the number of terminal lines used (for ClearLines).
 func displayPRPreview(title, body string) int {
 	return term.DisplayCard(title, body)
+}
+
+func renderPRConfirmation(title, body string, width int) int {
+	previewLines := displayPRPreview(title, body)
+	hintLines := printHintActions([]hintAction{
+		{key: "enter", desc: "create"},
+		{key: "e", desc: "edit title"},
+		{key: "E", desc: "editor"},
+		{key: "q", desc: "cancel"},
+	}, width)
+	return clearLinesForRenderedBlocks(previewLines, hintLines)
 }

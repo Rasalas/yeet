@@ -5,7 +5,7 @@ import (
 )
 
 // DisplayCard renders a title+body card in the same style as PR/commit previews.
-// Returns the number of terminal lines used (for ClearLines).
+// Returns the number of visible terminal lines rendered.
 func DisplayCard(title, body string) int {
 	lines := 0
 	width := TerminalWidth()
@@ -54,11 +54,13 @@ func DisplayCard(title, body string) int {
 }
 
 // DisplayMessage renders a commit message preview within the current terminal width.
-// Returns the number of terminal lines used, including the blank line after the preview.
+// Returns the number of visible terminal lines rendered, including the blank line after the preview.
 func DisplayMessage(message string, width int) int {
 	return renderMessage(message, width, true)
 }
 
+// RenderStreamingMessage renders the in-progress streaming preview.
+// Returns the number of visible terminal lines rendered.
 func RenderStreamingMessage(message string, width int) int {
 	return renderMessage(message, width, false)
 }

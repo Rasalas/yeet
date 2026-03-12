@@ -90,32 +90,18 @@ func runYeet(cmd *cobra.Command, args []string) error {
 
 	// 4. Confirm loop (show message, allow edit) — skip with -y
 	if yesFlag {
-		if streamed && term.MsgBg != "" {
+		if streamed {
 			term.ClearLines(streamedPreviewClearLines(message, terminalWidth()))
 		}
 		printMessage(message)
 	} else {
-		showMessage := !streamed
-		linesToClear := 3
-		if streamed && term.MsgBg != "" {
+		if streamed {
 			term.ClearLines(streamedPreviewClearLines(message, terminalWidth()))
-			showMessage = true
 		}
+		linesToClear := 3
 		for {
 			width := terminalWidth()
-			if showMessage {
-				linesToClear = printMessage(message)
-			} else {
-				fmt.Println()
-				linesToClear = plainMessageClearLines(message, width)
-				showMessage = true
-			}
-			linesToClear += printHintActions([]hintAction{
-				{key: "enter", desc: "commit"},
-				{key: "e", desc: "edit"},
-				{key: "E", desc: "editor"},
-				{key: "q", desc: "cancel"},
-			}, width)
+			linesToClear = renderCommitConfirmation(message, width)
 
 			action, err := term.WaitForAction()
 			if err != nil {
@@ -133,7 +119,7 @@ func runYeet(cmd *cobra.Command, args []string) error {
 				fmt.Printf("  %sCancelled.%s\n", term.Dim, term.Reset)
 				return nil
 			case term.ActionEdit:
-				term.ClearLines(linesToClear + 1)
+				term.ClearLines(linesToClear)
 				prev := message
 				edited, err := term.EditLine(message)
 				if err != nil {
@@ -145,7 +131,7 @@ func runYeet(cmd *cobra.Command, args []string) error {
 				}
 				continue
 			case term.ActionEditExternal:
-				term.ClearLines(linesToClear + 1)
+				term.ClearLines(linesToClear)
 				prev := message
 				edited, err := term.EditExternal(message)
 				if err != nil {
@@ -204,6 +190,17 @@ func runYeet(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
+}
+
+func renderCommitConfirmation(message string, width int) int {
+	messageLines := printMessage(message)
+	hintLines := printHintActions([]hintAction{
+		{key: "enter", desc: "commit"},
+		{key: "e", desc: "edit"},
+		{key: "E", desc: "editor"},
+		{key: "q", desc: "cancel"},
+	}, width)
+	return clearLinesForRenderedBlocks(messageLines, hintLines)
 }
 
 // printMessage displays the commit message card and returns the number of lines used.
@@ -391,16 +388,19 @@ func messageCardRows(message string, width int) int {
 }
 
 func streamedPreviewClearLines(message string, width int) int {
-	// Top + wrapped content rows + bottom, plus the current line below the preview.
-	return messageCardRows(message, width) + 3
+	if term.MsgBg != "" {
+		// Top + wrapped content rows + bottom, plus the current line below the preview.
+		return messageCardRows(message, width) + 3
+	}
+	return term.PlainMessageRows(message, width) + 1
 }
 
 func messageCardClearLines(message string, width int) int {
-	// Top + wrapped content rows + bottom + blank line.
-	return messageCardRows(message, width) + 3
+	// Top + wrapped content rows + bottom + blank line, plus the current line below.
+	return messageCardRows(message, width) + 4
 }
 
 func plainMessageClearLines(message string, width int) int {
-	// Wrapped content rows + one blank line.
-	return term.PlainMessageRows(message, width) + 1
+	// Wrapped content rows + one blank line, plus the current line below.
+	return term.PlainMessageRows(message, width) + 2
 }

@@ -45,3 +45,11 @@ func printHintActions(actions []hintAction, width int) int {
 	fmt.Printf("%s\n", term.Reset)
 	return lines
 }
+
+func clearLinesForRenderedBlocks(renderedLines ...int) int {
+	total := 1 // current cursor line below the rendered block
+	for _, lines := range renderedLines {
+		total += lines
+	}
+	return total
+}
