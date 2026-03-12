@@ -223,11 +223,11 @@ func displayPRPreview(title, body string) int {
 
 func renderPRConfirmation(title, body string, width int) int {
 	previewLines := displayPRPreview(title, body)
-	hintLines := printHintActions([]hintAction{
-		{key: "enter", desc: "create"},
-		{key: "e", desc: "edit title"},
-		{key: "E", desc: "editor"},
-		{key: "q", desc: "cancel"},
+	hintLines := term.PrintHintActions([]term.HintAction{
+		{Key: "enter", Desc: "create"},
+		{Key: "e", Desc: "edit title"},
+		{Key: "E", Desc: "editor"},
+		{Key: "q", Desc: "cancel"},
 	}, width)
-	return renderedBlockClearLines(previewLines, hintLines)
+	return term.RenderedBlockClearLines(previewLines, hintLines)
 }

@@ -155,8 +155,8 @@ func TestRenderedBlockClearLines(t *testing.T) {
 	defer func() { term.MsgBg = origMsgBg }()
 
 	message := "1234567" // width-4 = 6 => 2 visible rows
-	if got := renderedBlockClearLines(term.PlainMessageRows(message, width)); got != 3 {
-		t.Fatalf("renderedBlockClearLines(plain message) = %d, want %d", got, 3)
+	if got := term.RenderedBlockClearLines(term.PlainMessageRows(message, width)); got != 3 {
+		t.Fatalf("RenderedBlockClearLines(plain message) = %d, want %d", got, 3)
 	}
 }
 
@@ -172,21 +172,8 @@ func TestStreamedPreviewRenderedLinesPlain(t *testing.T) {
 	}
 }
 
-func TestPrintHintActionsWraps(t *testing.T) {
-	width := 20
-	actions := []hintAction{
-		{key: "enter", desc: "commit"},
-		{key: "e", desc: "edit"},
-		{key: "E", desc: "editor"},
-	}
-
-	if got := printHintActions(actions, width); got != 3 {
-		t.Fatalf("printHintActions() = %d, want %d", got, 3)
-	}
-}
-
 func TestRenderedBlockClearLinesMultiple(t *testing.T) {
-	if got := renderedBlockClearLines(5, 2); got != 8 {
-		t.Fatalf("renderedBlockClearLines() = %d, want %d", got, 8)
+	if got := term.RenderedBlockClearLines(5, 2); got != 8 {
+		t.Fatalf("RenderedBlockClearLines() = %d, want %d", got, 8)
 	}
 }

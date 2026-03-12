@@ -91,12 +91,12 @@ func runYeet(cmd *cobra.Command, args []string) error {
 	// 4. Confirm loop (show message, allow edit) — skip with -y
 	if yesFlag {
 		if streamed {
-			clearRenderedBlock(streamedPreviewRenderedLines(message, terminalWidth()))
+			term.ClearRenderedBlock(streamedPreviewRenderedLines(message, terminalWidth()))
 		}
 		printMessage(message)
 	} else {
 		if streamed {
-			clearRenderedBlock(streamedPreviewRenderedLines(message, terminalWidth()))
+			term.ClearRenderedBlock(streamedPreviewRenderedLines(message, terminalWidth()))
 		}
 		linesToClear := 3
 		for {
@@ -194,13 +194,13 @@ func runYeet(cmd *cobra.Command, args []string) error {
 
 func renderCommitConfirmation(message string, width int) int {
 	messageLines := printMessage(message)
-	hintLines := printHintActions([]hintAction{
-		{key: "enter", desc: "commit"},
-		{key: "e", desc: "edit"},
-		{key: "E", desc: "editor"},
-		{key: "q", desc: "cancel"},
+	hintLines := term.PrintHintActions([]term.HintAction{
+		{Key: "enter", Desc: "commit"},
+		{Key: "e", Desc: "edit"},
+		{Key: "E", Desc: "editor"},
+		{Key: "q", Desc: "cancel"},
 	}, width)
-	return renderedBlockClearLines(messageLines, hintLines)
+	return term.RenderedBlockClearLines(messageLines, hintLines)
 }
 
 // printMessage displays the commit message card and returns the number of lines used.
@@ -331,7 +331,7 @@ func generateStreaming(sp ai.StreamingProvider, ctx ai.CommitContext) (string, a
 			started = true
 		}
 		if previewLines > 0 {
-			clearRenderedBlock(previewLines)
+			term.ClearRenderedBlock(previewLines)
 		}
 		previewLines = term.RenderStreamingMessage(previewText.String(), terminalWidth())
 	})
@@ -340,7 +340,7 @@ func generateStreaming(sp ai.StreamingProvider, ctx ai.CommitContext) (string, a
 		s.Stop()
 	}
 	if err != nil && previewLines > 0 {
-		clearRenderedBlock(previewLines)
+		term.ClearRenderedBlock(previewLines)
 	}
 	return message, usage, err
 }
