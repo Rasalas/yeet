@@ -169,7 +169,7 @@ func runPR(cmd *cobra.Command, args []string) error {
 				return nil
 
 			case term.ActionEdit:
-				term.ClearLines(linesToClear)
+				term.ClearLines(linesToClear + 1)
 				edited, err := term.EditLine(title)
 				if err != nil {
 					return err
@@ -178,7 +178,7 @@ func runPR(cmd *cobra.Command, args []string) error {
 				continue
 
 			case term.ActionEditExternal:
-				term.ClearLines(linesToClear)
+				term.ClearLines(linesToClear + 1)
 				full := title + "\n\n" + body
 				edited, err := term.EditExternal(full)
 				if err != nil {

@@ -20,11 +20,12 @@ const (
 
 // ANSI color codes — disabled when NO_COLOR is set.
 var (
-	Bold  = "\033[1m"
-	Dim   = "\033[2m"
-	Red   = "\033[31m"
-	Green = "\033[32m"
-	Reset = "\033[0m"
+	Bold    = "\033[1m"
+	Dim     = "\033[2m"
+	Red     = "\033[31m"
+	Green   = "\033[32m"
+	Primary = "\033[38;2;255;140;66m"
+	Reset   = "\033[0m"
 
 	// Commit message display: colored left bar on warm dark background.
 	MsgBar   = "\033[38;2;255;140;66m\033[48;2;44;36;30m\u258e\033[39m"
@@ -40,6 +41,7 @@ func init() {
 		Dim = ""
 		Red = ""
 		Green = ""
+		Primary = ""
 		Reset = ""
 		MsgBar = ""
 		MsgBg = ""

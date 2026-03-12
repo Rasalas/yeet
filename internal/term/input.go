@@ -93,10 +93,11 @@ func EditLine(initial string) (string, error) {
 
 	redraw := func() {
 		if rendered {
+			fmt.Print("\r")
 			ClearLines(1)
 		}
 
-		viewWidth := messageContentWidth(TerminalWidth())
+		viewWidth := availableContentWidth(TerminalWidth(), 0)
 		start := 0
 		if cursor > viewWidth {
 			start = cursor - viewWidth
@@ -114,8 +115,8 @@ func EditLine(initial string) (string, error) {
 		visible := string(line[start:end])
 		cursorCol := cursor - start
 
-		fmt.Printf("  %s%s%s", MsgOpen, visible, MsgClose)
-		fmt.Printf("\r\033[%dC", 4+cursorCol)
+		fmt.Printf("%s%s%s", Primary, visible, Reset)
+		fmt.Printf("\r\033[%dC", cursorCol)
 		rendered = true
 	}
 
@@ -123,6 +124,7 @@ func EditLine(initial string) (string, error) {
 		if !rendered {
 			return
 		}
+		fmt.Print("\r")
 		ClearLines(1)
 		rendered = false
 	}

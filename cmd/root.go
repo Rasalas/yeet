@@ -133,7 +133,7 @@ func runYeet(cmd *cobra.Command, args []string) error {
 				fmt.Printf("  %sCancelled.%s\n", term.Dim, term.Reset)
 				return nil
 			case term.ActionEdit:
-				term.ClearLines(linesToClear)
+				term.ClearLines(linesToClear + 1)
 				prev := message
 				edited, err := term.EditLine(message)
 				if err != nil {
@@ -145,7 +145,7 @@ func runYeet(cmd *cobra.Command, args []string) error {
 				}
 				continue
 			case term.ActionEditExternal:
-				term.ClearLines(linesToClear)
+				term.ClearLines(linesToClear + 1)
 				prev := message
 				edited, err := term.EditExternal(message)
 				if err != nil {
