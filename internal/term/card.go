@@ -9,20 +9,19 @@ import (
 // Returns the number of terminal lines used (for ClearLines).
 func DisplayCard(title, body string) int {
 	lines := 0
+	width := TerminalWidth()
+	titleLines := wrapRunes("# "+title, messageContentWidth(width))
+	bodyLines := []string(nil)
+	if body != "" {
+		bodyLines = wrapMultiline(body, messageContentWidth(width))
+	}
 
-	var content []string
-	content = append(content, "# "+title)
+	content := append([]string{}, titleLines...)
 	if body != "" {
 		content = append(content, "")
-		content = append(content, strings.Split(body, "\n")...)
+		content = append(content, bodyLines...)
 	}
-
-	maxWidth := 0
-	for _, line := range content {
-		if w := len([]rune(line)); w > maxWidth {
-			maxWidth = w
-		}
-	}
+	maxWidth := maxLineWidth(content)
 
 	if MsgBg != "" {
 		pad := strings.Repeat(" ", maxWidth+3)
@@ -30,7 +29,7 @@ func DisplayCard(title, body string) int {
 		lines++
 		for i, line := range content {
 			rpad := strings.Repeat(" ", maxWidth-len([]rune(line)))
-			if i == 0 {
+			if i < len(titleLines) {
 				fmt.Printf("  %s%s%s%s\n", MsgOpen, line, rpad, MsgClose)
 			} else {
 				fmt.Printf("  %s%s %s%s  %s\n", MsgBar, Dim, line, rpad, Reset)
@@ -41,7 +40,7 @@ func DisplayCard(title, body string) int {
 		lines++
 	} else {
 		for i, line := range content {
-			if i == 0 {
+			if i < len(titleLines) {
 				fmt.Printf("  %s%s%s\n", MsgOpen, line, MsgClose)
 			} else {
 				fmt.Printf("  %s\n", line)
@@ -53,4 +52,29 @@ func DisplayCard(title, body string) int {
 	fmt.Println()
 	lines++
 	return lines
+}
+
+// DisplayMessage renders a commit message preview within the current terminal width.
+// Returns the number of terminal lines used, including the blank line after the preview.
+func DisplayMessage(message string, width int) int {
+	if MsgBg != "" {
+		rows := wrapRunes(message, messageContentWidth(width))
+		maxWidth := maxLineWidth(rows)
+		pad := strings.Repeat(" ", maxWidth+3)
+
+		fmt.Printf("  %s%s%s\n", MsgBar, pad, Reset)
+		for _, row := range rows {
+			rpad := strings.Repeat(" ", maxWidth-len([]rune(row)))
+			fmt.Printf("  %s%s%s%s\n", MsgOpen, row, rpad, MsgClose)
+		}
+		fmt.Printf("  %s%s%s\n\n", MsgBar, pad, Reset)
+		return len(rows) + 3
+	}
+
+	rows := wrapRunes(message, plainMessageContentWidth(width))
+	for _, row := range rows {
+		fmt.Printf("  %s%s%s\n", MsgOpen, row, MsgClose)
+	}
+	fmt.Println()
+	return len(rows) + 1
 }

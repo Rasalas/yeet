@@ -156,14 +156,13 @@ func TestMessageCardAndStreamLineCalculations(t *testing.T) {
 	width := 20
 	message := "123456789012345" // len = 15
 
-	// Card row columns = len+6 => 21 columns at width 20 => 2 wrapped rows.
 	if got := messageCardRows(message, width); got != 2 {
 		t.Fatalf("messageCardRows() = %d, want %d", got, 2)
 	}
 
-	// 3 card rows, each wrapping to 2 lines => 6, plus blank + hint => 8.
-	if got := messageCardClearLines(message, width); got != 8 {
-		t.Fatalf("messageCardClearLines() = %d, want %d", got, 8)
+	// Top + 2 wrapped rows + bottom + blank line = 5.
+	if got := messageCardClearLines(message, width); got != 5 {
+		t.Fatalf("messageCardClearLines() = %d, want %d", got, 5)
 	}
 
 	// Streamed preview wrapped rows (2) + current line (1) => 3.
@@ -174,8 +173,21 @@ func TestMessageCardAndStreamLineCalculations(t *testing.T) {
 
 func TestPlainMessageClearLines(t *testing.T) {
 	width := 10
-	message := "1234567" // columns = len+4 = 11 => 2 rows
-	if got := plainMessageClearLines(message, width); got != 4 {
-		t.Fatalf("plainMessageClearLines() = %d, want %d", got, 4)
+	message := "1234567" // width-4 = 6 => 2 rows + blank = 3
+	if got := plainMessageClearLines(message, width); got != 3 {
+		t.Fatalf("plainMessageClearLines() = %d, want %d", got, 3)
+	}
+}
+
+func TestPrintHintActionsWraps(t *testing.T) {
+	width := 20
+	actions := []hintAction{
+		{key: "enter", desc: "commit"},
+		{key: "e", desc: "edit"},
+		{key: "E", desc: "editor"},
+	}
+
+	if got := printHintActions(actions, width); got != 3 {
+		t.Fatalf("printHintActions() = %d, want %d", got, 3)
 	}
 }

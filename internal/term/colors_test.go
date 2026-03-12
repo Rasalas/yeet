@@ -6,6 +6,14 @@ import (
 )
 
 func TestColorizeDiffStat(t *testing.T) {
+	origBold, origDim, origRed, origGreen, origReset := Bold, Dim, Red, Green, Reset
+	Bold = "\033[1m"
+	Dim = "\033[2m"
+	Red = "\033[31m"
+	Green = "\033[32m"
+	Reset = "\033[0m"
+	defer func() { Bold, Dim, Red, Green, Reset = origBold, origDim, origRed, origGreen, origReset }()
+
 	t.Run("file with insertions and deletions", func(t *testing.T) {
 		line := " cmd/root.go | 29 +++---"
 		got := ColorizeDiffStat(line)

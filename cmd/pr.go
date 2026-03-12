@@ -144,19 +144,19 @@ func runPR(cmd *cobra.Command, args []string) error {
 		showPRPreview := true
 		linesToClear := 3
 		for {
+			width := term.TerminalWidth()
 			if showPRPreview {
 				linesToClear = displayPRPreview(title, body)
 			} else {
 				showPRPreview = true
 			}
 
-			fmt.Printf("  %s%s  ·  %s  ·  %s  ·  %s%s\n",
-				term.Dim,
-				term.Keyhint("enter", "create"),
-				term.Keyhint("e", "edit title"),
-				term.Keyhint("E", "editor"),
-				term.Keyhint("q", "cancel"),
-				term.Reset)
+			linesToClear += printHintActions([]hintAction{
+				{key: "enter", desc: "create"},
+				{key: "e", desc: "edit title"},
+				{key: "E", desc: "editor"},
+				{key: "q", desc: "cancel"},
+			}, width)
 
 			action, err := term.WaitForAction()
 			if err != nil {
@@ -230,7 +230,5 @@ func parsePR(raw string) (title, body string) {
 // displayPRPreview shows the PR title and body inside a single card.
 // Returns the number of terminal lines used (for ClearLines).
 func displayPRPreview(title, body string) int {
-	lines := term.DisplayCard(title, body)
-	lines++ // keyhint line
-	return lines
+	return term.DisplayCard(title, body)
 }

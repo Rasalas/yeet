@@ -90,41 +90,72 @@ func EditLine(initial string) (string, error) {
 	line := []rune(initial)
 	cursor := len(line)
 	hasCard := MsgBg != ""
-	firstDraw := true
+	renderedLines := 0
+	linesBelowCursor := 0
 
 	redraw := func() {
+		if renderedLines > 0 {
+			if linesBelowCursor > 0 {
+				fmt.Printf("\033[%dB", linesBelowCursor)
+			}
+			ClearLines(renderedLines)
+		}
+
+		width := TerminalWidth()
+		text := string(line)
 		if hasCard {
-			pad := strings.Repeat(" ", len(line)+3)
-			if !firstDraw {
-				fmt.Print("\033[1A")
+			rows := wrapRunes(text, messageContentWidth(width))
+			maxWidth := maxLineWidth(rows)
+			pad := strings.Repeat(" ", maxWidth+3)
+
+			fmt.Printf("  %s%s%s", MsgBar, pad, Reset)
+			fmt.Print("\n")
+			for i, row := range rows {
+				rpad := strings.Repeat(" ", maxWidth-len([]rune(row)))
+				fmt.Printf("  %s%s%s%s", MsgOpen, row, rpad, MsgClose)
+				if i < len(rows)-1 {
+					fmt.Print("\n")
+				}
 			}
-			firstDraw = false
-			fmt.Print("\r\033[2K")
+			fmt.Print("\n")
 			fmt.Printf("  %s%s%s", MsgBar, pad, Reset)
-			fmt.Print("\n\033[2K")
-			fmt.Printf("  %s%s%s", MsgOpen, string(line), MsgClose)
-			fmt.Print("\n\033[2K")
-			fmt.Printf("  %s%s%s", MsgBar, pad, Reset)
-			fmt.Printf("\033[1A\r\033[%dC", 4+cursor)
+
+			cursorRow, cursorCol := wrappedCursorPosition(cursor, len(line), messageContentWidth(width))
+			renderedLines = len(rows) + 2
+			linesBelowCursor = len(rows) - cursorRow
+			if linesBelowCursor > 0 {
+				fmt.Printf("\033[%dA", linesBelowCursor)
+			}
+			fmt.Printf("\r\033[%dC", 4+cursorCol)
 		} else {
-			fmt.Print("\r\033[2K")
-			fmt.Printf("  %s%s%s", MsgOpen, string(line), MsgClose)
-			back := len(line) - cursor + MsgPad
-			if back > 0 {
-				fmt.Printf("\033[%dD", back)
+			rows := wrapRunes(text, plainMessageContentWidth(width))
+			for i, row := range rows {
+				fmt.Printf("  %s%s%s", MsgOpen, row, MsgClose)
+				if i < len(rows)-1 {
+					fmt.Print("\n")
+				}
 			}
+
+			cursorRow, cursorCol := wrappedCursorPosition(cursor, len(line), plainMessageContentWidth(width))
+			renderedLines = len(rows)
+			linesBelowCursor = len(rows) - 1 - cursorRow
+			if linesBelowCursor > 0 {
+				fmt.Printf("\033[%dA", linesBelowCursor)
+			}
+			fmt.Printf("\r\033[%dC", 4+cursorCol)
 		}
 	}
 
 	clearEdit := func() {
-		if hasCard && !firstDraw {
-			fmt.Print("\033[1A\r\033[2K")
-			fmt.Print("\n\033[2K")
-			fmt.Print("\n\033[2K")
-			fmt.Print("\033[2A\r")
-		} else {
-			fmt.Print("\r\033[2K")
+		if renderedLines == 0 {
+			return
 		}
+		if linesBelowCursor > 0 {
+			fmt.Printf("\033[%dB", linesBelowCursor)
+		}
+		ClearLines(renderedLines)
+		renderedLines = 0
+		linesBelowCursor = 0
 	}
 
 	redraw()
