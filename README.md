@@ -2,22 +2,8 @@
 
 Git commit & push in one command. With AI-generated commit messages.
 
-```
-$ yeet
 
-  cmd/root.go              | 163 ++++++++++++++++++++++++++++++++++++++++++-----
-  internal/ai/anthropic.go |  81 +++++++++++++++++++++++
-  2 files changed, 225 insertions(+), 19 deletions(-)
-
-  ⠋ Generating...
-  > refactor(config): simplify provider initialization
-
-  Enter commit  ·  e edit  ·  E $EDITOR  ·  Esc cancel
-
-  [main 2dd3b34] refactor(config): simplify provider initialization
-  Pushed to origin/main.
-  $0.0001 · 3.1k in / 28 out · gpt-4o-mini
-```
+![alt text](docs/assets/screenshot-yeet.png)
 
 Commit messages stream in token-by-token with a spinner. Diff stats, messages, and costs are color-coded. Set `NO_COLOR=1` to disable colors.
 
