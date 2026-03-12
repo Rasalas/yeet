@@ -46,7 +46,7 @@ func printHintActions(actions []hintAction, width int) int {
 	return lines
 }
 
-func clearLinesForRenderedBlocks(renderedLines ...int) int {
+func renderedBlockClearLines(renderedLines ...int) int {
 	total := 1 // current cursor line below the rendered block
 	for _, lines := range renderedLines {
 		total += lines
@@ -54,6 +54,6 @@ func clearLinesForRenderedBlocks(renderedLines ...int) int {
 	return total
 }
 
-func clearRenderedLines(renderedLines int) {
-	term.ClearLines(clearLinesForRenderedBlocks(renderedLines))
+func clearRenderedBlock(renderedLines ...int) {
+	term.ClearLines(renderedBlockClearLines(renderedLines...))
 }

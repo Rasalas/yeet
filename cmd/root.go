@@ -91,12 +91,12 @@ func runYeet(cmd *cobra.Command, args []string) error {
 	// 4. Confirm loop (show message, allow edit) — skip with -y
 	if yesFlag {
 		if streamed {
-			clearRenderedLines(streamedPreviewClearLines(message, terminalWidth()) - 1)
+			clearRenderedBlock(streamedPreviewRenderedLines(message, terminalWidth()))
 		}
 		printMessage(message)
 	} else {
 		if streamed {
-			clearRenderedLines(streamedPreviewClearLines(message, terminalWidth()) - 1)
+			clearRenderedBlock(streamedPreviewRenderedLines(message, terminalWidth()))
 		}
 		linesToClear := 3
 		for {
@@ -200,7 +200,7 @@ func renderCommitConfirmation(message string, width int) int {
 		{key: "E", desc: "editor"},
 		{key: "q", desc: "cancel"},
 	}, width)
-	return clearLinesForRenderedBlocks(messageLines, hintLines)
+	return renderedBlockClearLines(messageLines, hintLines)
 }
 
 // printMessage displays the commit message card and returns the number of lines used.
@@ -331,7 +331,7 @@ func generateStreaming(sp ai.StreamingProvider, ctx ai.CommitContext) (string, a
 			started = true
 		}
 		if previewLines > 0 {
-			clearRenderedLines(previewLines)
+			clearRenderedBlock(previewLines)
 		}
 		previewLines = term.RenderStreamingMessage(previewText.String(), terminalWidth())
 	})
@@ -340,7 +340,7 @@ func generateStreaming(sp ai.StreamingProvider, ctx ai.CommitContext) (string, a
 		s.Stop()
 	}
 	if err != nil && previewLines > 0 {
-		clearRenderedLines(previewLines)
+		clearRenderedBlock(previewLines)
 	}
 	return message, usage, err
 }
@@ -373,34 +373,14 @@ func terminalWidth() int {
 	return term.TerminalWidth()
 }
 
-func wrappedLineCount(columns, width int) int {
-	if width <= 0 {
-		width = 80
-	}
-	if columns <= 0 {
-		return 1
-	}
-	return (columns + width - 1) / width
-}
-
 func messageCardRows(message string, width int) int {
 	return term.MessageCardRows(message, width)
 }
 
-func streamedPreviewClearLines(message string, width int) int {
+func streamedPreviewRenderedLines(message string, width int) int {
 	if term.MsgBg != "" {
-		// Top + wrapped content rows + bottom, plus the current line below the preview.
-		return messageCardRows(message, width) + 3
+		// Top + wrapped content rows + bottom.
+		return messageCardRows(message, width) + 2
 	}
-	return term.PlainMessageRows(message, width) + 1
-}
-
-func messageCardClearLines(message string, width int) int {
-	// Top + wrapped content rows + bottom + blank line, plus the current line below.
-	return messageCardRows(message, width) + 4
-}
-
-func plainMessageClearLines(message string, width int) int {
-	// Wrapped content rows + one blank line, plus the current line below.
-	return term.PlainMessageRows(message, width) + 2
+	return term.PlainMessageRows(message, width)
 }

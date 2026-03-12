@@ -130,29 +130,6 @@ func TestRunYeetWithLocalFlagSkipsPush(t *testing.T) {
 	}
 }
 
-func TestWrappedLineCount(t *testing.T) {
-	tests := []struct {
-		name    string
-		columns int
-		width   int
-		want    int
-	}{
-		{name: "single row", columns: 10, width: 80, want: 1},
-		{name: "exact width", columns: 20, width: 20, want: 1},
-		{name: "wraps once", columns: 21, width: 20, want: 2},
-		{name: "zero columns", columns: 0, width: 20, want: 1},
-		{name: "invalid width fallback", columns: 81, width: 0, want: 2},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := wrappedLineCount(tt.columns, tt.width); got != tt.want {
-				t.Fatalf("wrappedLineCount(%d, %d) = %d, want %d", tt.columns, tt.width, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestMessageCardAndStreamLineCalculations(t *testing.T) {
 	width := 20
 	message := "123456789012345" // len = 15
@@ -165,38 +142,33 @@ func TestMessageCardAndStreamLineCalculations(t *testing.T) {
 		t.Fatalf("messageCardRows() = %d, want %d", got, 2)
 	}
 
-	// Top + 2 wrapped rows + bottom + current line below = 5.
-	if got := streamedPreviewClearLines(message, width); got != 5 {
-		t.Fatalf("streamedPreviewClearLines() = %d, want %d", got, 5)
-	}
-
-	// Top + 2 wrapped rows + bottom + blank line, plus current line below = 6.
-	if got := messageCardClearLines(message, width); got != 6 {
-		t.Fatalf("messageCardClearLines() = %d, want %d", got, 6)
+	// Top + 2 wrapped rows + bottom = 4 visible lines.
+	if got := streamedPreviewRenderedLines(message, width); got != 4 {
+		t.Fatalf("streamedPreviewRenderedLines() = %d, want %d", got, 4)
 	}
 }
 
-func TestPlainMessageClearLines(t *testing.T) {
+func TestRenderedBlockClearLines(t *testing.T) {
 	width := 10
 	origMsgBg := term.MsgBg
 	term.MsgBg = ""
 	defer func() { term.MsgBg = origMsgBg }()
 
-	message := "1234567" // width-4 = 6 => 2 rows + blank + current line = 4
-	if got := plainMessageClearLines(message, width); got != 4 {
-		t.Fatalf("plainMessageClearLines() = %d, want %d", got, 4)
+	message := "1234567" // width-4 = 6 => 2 visible rows
+	if got := renderedBlockClearLines(term.PlainMessageRows(message, width)); got != 3 {
+		t.Fatalf("renderedBlockClearLines(plain message) = %d, want %d", got, 3)
 	}
 }
 
-func TestStreamedPreviewClearLinesPlain(t *testing.T) {
+func TestStreamedPreviewRenderedLinesPlain(t *testing.T) {
 	width := 10
 	origMsgBg := term.MsgBg
 	term.MsgBg = ""
 	defer func() { term.MsgBg = origMsgBg }()
 
-	message := "1234567" // width-4 = 6 => 2 rows + current line below = 3
-	if got := streamedPreviewClearLines(message, width); got != 3 {
-		t.Fatalf("streamedPreviewClearLines() = %d, want %d", got, 3)
+	message := "1234567" // width-4 = 6 => 2 visible rows
+	if got := streamedPreviewRenderedLines(message, width); got != 2 {
+		t.Fatalf("streamedPreviewRenderedLines() = %d, want %d", got, 2)
 	}
 }
 
@@ -213,8 +185,8 @@ func TestPrintHintActionsWraps(t *testing.T) {
 	}
 }
 
-func TestClearLinesForRenderedBlocks(t *testing.T) {
-	if got := clearLinesForRenderedBlocks(5, 2); got != 8 {
-		t.Fatalf("clearLinesForRenderedBlocks() = %d, want %d", got, 8)
+func TestRenderedBlockClearLinesMultiple(t *testing.T) {
+	if got := renderedBlockClearLines(5, 2); got != 8 {
+		t.Fatalf("renderedBlockClearLines() = %d, want %d", got, 8)
 	}
 }

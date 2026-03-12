@@ -229,5 +229,5 @@ func renderPRConfirmation(title, body string, width int) int {
 		{key: "E", desc: "editor"},
 		{key: "q", desc: "cancel"},
 	}, width)
-	return clearLinesForRenderedBlocks(previewLines, hintLines)
+	return renderedBlockClearLines(previewLines, hintLines)
 }
