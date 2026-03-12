@@ -123,24 +123,42 @@ func runPR(cmd *cobra.Command, args []string) error {
 
 	var title, body string
 	var usage *ai.Usage
+	streamed := false
+	streamedPreviewLines := 0
 
-	var s term.Spinner
-	s.Start("Generating PR description...")
+	if sp, ok := provider.(ai.StreamingProvider); ok {
+		msg, u, previewLines, genErr := generateStreamingPR(sp, ctx)
+		if genErr != nil {
+			return fmt.Errorf("AI generation failed: %w", genErr)
+		}
+		usage = &u
+		title, body = parsePR(msg)
+		streamed = true
+		streamedPreviewLines = previewLines
+	} else {
+		var s term.Spinner
+		s.Start("Generating PR description...")
 
-	msg, u, genErr := provider.GenerateCommitMessage(ctx)
-	s.Stop()
+		msg, u, genErr := provider.GenerateCommitMessage(ctx)
+		s.Stop()
 
-	if genErr != nil {
-		return fmt.Errorf("AI generation failed: %w", genErr)
+		if genErr != nil {
+			return fmt.Errorf("AI generation failed: %w", genErr)
+		}
+		usage = &u
+		title, body = parsePR(msg)
 	}
-	usage = &u
-
-	title, body = parsePR(msg)
 
 	// 7. Preview — skip with -y
 	if yesFlag {
+		if streamed && streamedPreviewLines > 0 {
+			term.ClearRenderedBlock(streamedPreviewLines)
+		}
 		displayPRPreview(title, body)
 	} else {
+		if streamed && streamedPreviewLines > 0 {
+			term.ClearRenderedBlock(streamedPreviewLines)
+		}
 		linesToClear := 3
 		for {
 			width := term.TerminalWidth()
@@ -230,4 +248,34 @@ func renderPRConfirmation(title, body string, width int) int {
 		{Key: "q", Desc: "cancel"},
 	}, width)
 	return term.RenderedBlockClearLines(previewLines, hintLines)
+}
+
+func generateStreamingPR(sp ai.StreamingProvider, ctx ai.CommitContext) (string, ai.Usage, int, error) {
+	var s term.Spinner
+	s.Start("Generating PR description...")
+
+	var previewLines int
+	var previewText strings.Builder
+	started := false
+
+	message, usage, err := sp.GenerateCommitMessageStream(ctx, func(token string) {
+		previewText.WriteString(token)
+		if !started {
+			s.Stop()
+			started = true
+		}
+		if previewLines > 0 {
+			term.ClearRenderedBlock(previewLines)
+		}
+		title, body := parsePR(previewText.String())
+		previewLines = displayPRPreview(title, body)
+	})
+
+	if !started {
+		s.Stop()
+	}
+	if err != nil && previewLines > 0 {
+		term.ClearRenderedBlock(previewLines)
+	}
+	return message, usage, previewLines, err
 }
