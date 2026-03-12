@@ -96,7 +96,7 @@ func EditLine(initial string) (string, error) {
 			ClearLines(1)
 		}
 
-		viewWidth := plainMessageContentWidth(TerminalWidth())
+		viewWidth := messageContentWidth(TerminalWidth())
 		start := 0
 		if cursor > viewWidth {
 			start = cursor - viewWidth
