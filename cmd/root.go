@@ -323,11 +323,28 @@ func generateStreaming(sp ai.StreamingProvider, ctx ai.CommitContext) (string, a
 	var s term.Spinner
 	s.Start("Generating...")
 
+	var previewLines int
+	var previewText strings.Builder
+	started := false
+
 	message, usage, err := sp.GenerateCommitMessageStream(ctx, func(token string) {
-		s.ReplaceWithContent(token)
+		previewText.WriteString(token)
+		if !started {
+			s.Stop()
+			started = true
+		}
+		if previewLines > 0 {
+			term.ClearLines(previewLines + 1)
+		}
+		previewLines = term.RenderStreamingMessage(previewText.String(), terminalWidth())
 	})
 
-	s.Stop()
+	if !started {
+		s.Stop()
+	}
+	if err != nil && previewLines > 0 {
+		term.ClearLines(previewLines + 1)
+	}
 	return message, usage, err
 }
 
@@ -374,8 +391,8 @@ func messageCardRows(message string, width int) int {
 }
 
 func streamedPreviewClearLines(message string, width int) int {
-	// Wrapped preview rows + current line after spinner's trailing newline.
-	return messageCardRows(message, width) + 1
+	// Top + wrapped content rows + bottom, plus the current line below the preview.
+	return messageCardRows(message, width) + 3
 }
 
 func messageCardClearLines(message string, width int) int {

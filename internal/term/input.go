@@ -98,22 +98,8 @@ func EditLine(initial string) (string, error) {
 		}
 
 		viewWidth := availableContentWidth(TerminalWidth(), 0)
-		start := 0
-		if cursor > viewWidth {
-			start = cursor - viewWidth
-		}
-		if start > len(line) {
-			start = len(line)
-		}
-		end := start + viewWidth
-		if end > len(line) {
-			end = len(line)
-			if end-start < viewWidth && end > viewWidth {
-				start = end - viewWidth
-			}
-		}
+		start, end, cursorCol := visibleWindow(line, cursor, viewWidth)
 		visible := string(line[start:end])
-		cursorCol := cursor - start
 
 		fmt.Printf("%s%s%s", Primary, visible, Reset)
 		fmt.Printf("\r\033[%dC", cursorCol)

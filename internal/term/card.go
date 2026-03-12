@@ -2,7 +2,6 @@ package term
 
 import (
 	"fmt"
-	"strings"
 )
 
 // DisplayCard renders a title+body card in the same style as PR/commit previews.
@@ -24,11 +23,11 @@ func DisplayCard(title, body string) int {
 	maxWidth := maxLineWidth(content)
 
 	if MsgBg != "" {
-		pad := strings.Repeat(" ", maxWidth+3)
+		pad := padCells(maxWidth + 3)
 		fmt.Printf("  %s%s%s\n", MsgBar, pad, Reset)
 		lines++
 		for i, line := range content {
-			rpad := strings.Repeat(" ", maxWidth-len([]rune(line)))
+			rpad := padCells(maxWidth - displayWidth(line))
 			if i < len(titleLines) {
 				fmt.Printf("  %s%s%s%s\n", MsgOpen, line, rpad, MsgClose)
 			} else {
@@ -57,24 +56,39 @@ func DisplayCard(title, body string) int {
 // DisplayMessage renders a commit message preview within the current terminal width.
 // Returns the number of terminal lines used, including the blank line after the preview.
 func DisplayMessage(message string, width int) int {
+	return renderMessage(message, width, true)
+}
+
+func RenderStreamingMessage(message string, width int) int {
+	return renderMessage(message, width, false)
+}
+
+func renderMessage(message string, width int, trailingBlank bool) int {
 	if MsgBg != "" {
 		rows := wrapRunes(message, messageContentWidth(width))
 		maxWidth := maxLineWidth(rows)
-		pad := strings.Repeat(" ", maxWidth+3)
+		pad := padCells(maxWidth + 3)
 
 		fmt.Printf("  %s%s%s\n", MsgBar, pad, Reset)
 		for _, row := range rows {
-			rpad := strings.Repeat(" ", maxWidth-len([]rune(row)))
+			rpad := padCells(maxWidth - displayWidth(row))
 			fmt.Printf("  %s%s%s%s\n", MsgOpen, row, rpad, MsgClose)
 		}
-		fmt.Printf("  %s%s%s\n\n", MsgBar, pad, Reset)
-		return len(rows) + 3
+		fmt.Printf("  %s%s%s\n", MsgBar, pad, Reset)
+		if trailingBlank {
+			fmt.Println()
+			return len(rows) + 3
+		}
+		return len(rows) + 2
 	}
 
 	rows := wrapRunes(message, plainMessageContentWidth(width))
 	for _, row := range rows {
 		fmt.Printf("  %s%s%s\n", MsgOpen, row, MsgClose)
 	}
-	fmt.Println()
-	return len(rows) + 1
+	if trailingBlank {
+		fmt.Println()
+		return len(rows) + 1
+	}
+	return len(rows)
 }

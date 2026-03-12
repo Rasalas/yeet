@@ -12,6 +12,45 @@ func TestMessageAndPlainRows(t *testing.T) {
 	}
 }
 
+func TestWrapRunesPrefersWordBoundaries(t *testing.T) {
+	got := wrapRunes("clarify usage instructions for wrapping", 18)
+	want := []string{"clarify usage", "instructions for", "wrapping"}
+	if len(got) != len(want) {
+		t.Fatalf("wrapRunes() len = %d, want %d (%v)", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("wrapRunes()[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+func TestWrapRunesHandlesWideUnicode(t *testing.T) {
+	got := wrapRunes("fix 漢字 support", 10)
+	want := []string{"fix 漢字", "support"}
+	if len(got) != len(want) {
+		t.Fatalf("wrapRunes() len = %d, want %d (%v)", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("wrapRunes()[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+func TestVisibleWindowUsesDisplayWidth(t *testing.T) {
+	line := []rune("fix 漢字 support")
+	cursor := len(line)
+	start, end, cursorCol := visibleWindow(line, cursor, 8)
+
+	if got := string(line[start:end]); got != "support" {
+		t.Fatalf("visibleWindow() text = %q, want %q", got, "support")
+	}
+	if cursorCol != 7 {
+		t.Fatalf("visibleWindow() cursorCol = %d, want 7", cursorCol)
+	}
+}
+
 func TestWrappedCursorPosition(t *testing.T) {
 	tests := []struct {
 		name    string

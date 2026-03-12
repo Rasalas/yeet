@@ -49,21 +49,6 @@ func (s *Spinner) Start(label string) {
 	}()
 }
 
-// ReplaceWithContent clears the spinner and begins inline content.
-// Call this on the first token. Returns true if this was the first call.
-func (s *Spinner) ReplaceWithContent(content string) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if !s.firstText {
-		s.firstText = true
-		fmt.Printf("\r\033[K")
-		fmt.Printf("  %s%s", MsgOpen, content)
-		return true
-	}
-	fmt.Print(content)
-	return false
-}
-
 // Stop ends the spinner animation and cleans up the line.
 func (s *Spinner) Stop() {
 	s.mu.Lock()
@@ -71,10 +56,6 @@ func (s *Spinner) Stop() {
 	if !s.stopped {
 		s.stopped = true
 		close(s.done)
-		if s.firstText {
-			fmt.Printf("%s\n", MsgClose)
-		} else {
-			fmt.Print("\r\033[K")
-		}
+		fmt.Print("\r\033[K")
 	}
 }

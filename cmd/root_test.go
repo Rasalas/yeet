@@ -165,9 +165,9 @@ func TestMessageCardAndStreamLineCalculations(t *testing.T) {
 		t.Fatalf("messageCardClearLines() = %d, want %d", got, 5)
 	}
 
-	// Streamed preview wrapped rows (2) + current line (1) => 3.
-	if got := streamedPreviewClearLines(message, width); got != 3 {
-		t.Fatalf("streamedPreviewClearLines() = %d, want %d", got, 3)
+	// Top + 2 wrapped rows + bottom + current line below = 5.
+	if got := streamedPreviewClearLines(message, width); got != 5 {
+		t.Fatalf("streamedPreviewClearLines() = %d, want %d", got, 5)
 	}
 }
 
