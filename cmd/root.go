@@ -91,12 +91,12 @@ func runYeet(cmd *cobra.Command, args []string) error {
 	// 4. Confirm loop (show message, allow edit) — skip with -y
 	if yesFlag {
 		if streamed {
-			term.ClearLines(streamedPreviewClearLines(message, terminalWidth()))
+			clearRenderedLines(streamedPreviewClearLines(message, terminalWidth()) - 1)
 		}
 		printMessage(message)
 	} else {
 		if streamed {
-			term.ClearLines(streamedPreviewClearLines(message, terminalWidth()))
+			clearRenderedLines(streamedPreviewClearLines(message, terminalWidth()) - 1)
 		}
 		linesToClear := 3
 		for {
@@ -331,7 +331,7 @@ func generateStreaming(sp ai.StreamingProvider, ctx ai.CommitContext) (string, a
 			started = true
 		}
 		if previewLines > 0 {
-			term.ClearLines(previewLines + 1)
+			clearRenderedLines(previewLines)
 		}
 		previewLines = term.RenderStreamingMessage(previewText.String(), terminalWidth())
 	})
@@ -340,7 +340,7 @@ func generateStreaming(sp ai.StreamingProvider, ctx ai.CommitContext) (string, a
 		s.Stop()
 	}
 	if err != nil && previewLines > 0 {
-		term.ClearLines(previewLines + 1)
+		clearRenderedLines(previewLines)
 	}
 	return message, usage, err
 }

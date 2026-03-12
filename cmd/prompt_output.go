@@ -53,3 +53,7 @@ func clearLinesForRenderedBlocks(renderedLines ...int) int {
 	}
 	return total
 }
+
+func clearRenderedLines(renderedLines int) {
+	term.ClearLines(clearLinesForRenderedBlocks(renderedLines))
+}
