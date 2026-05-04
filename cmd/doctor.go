@@ -49,6 +49,11 @@ func runDoctor() error {
 
 	fmt.Println()
 	fmt.Printf("  %sProvider%s  %s\n", term.Bold, term.Reset, provider)
+	if provider == "auto" {
+		if autoProvider := ai.AutoProviderName(cfg); autoProvider != "" {
+			fmt.Printf("  %sAuto%s      %s\n", term.Bold, term.Reset, autoProvider)
+		}
+	}
 	fmt.Printf("  %sModel%s     %s\n", term.Bold, term.Reset, model)
 	if rp, ok := cfg.ResolveProviderFull(provider); ok && rp.Protocol == config.ProtocolACP {
 		fmt.Printf("  %sCommand%s   %s\n", term.Bold, term.Reset, strings.Join(append([]string{rp.Command}, rp.Args...), " "))

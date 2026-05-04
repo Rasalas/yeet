@@ -117,7 +117,16 @@ yeet auth import groq      # Import a specific provider
 
 ## Auto provider
 
-The default provider is `auto`. It picks the cheapest available provider by input token cost from all providers that have an API key configured. This means you can set up multiple providers and yeet will always use the most cost-effective one.
+The default provider is `auto`. It tries local/native providers first, then falls back to the cheapest available API-key provider by input token cost.
+
+Default order:
+
+1. `codex` via ACP, if the adapter command is available
+2. `ollama`, if the configured Ollama server is reachable
+3. `claude` via ACP, if the adapter command is available
+4. API-key providers, sorted by input token cost
+
+Codex/Claude subscription quota or remaining "volume" is not exposed through ACP, so yeet uses this fixed order instead of trying to guess it.
 
 ## Config
 

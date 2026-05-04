@@ -443,7 +443,7 @@ func resolveEvalTarget(cfg config.Config, providerFlag, modelFlag string) (confi
 	if providerName == "auto" {
 		modelName := ai.AutoModelName(out)
 		if modelName == "" {
-			return config.Config{}, "", "", fmt.Errorf("auto provider has no available model (missing API keys)")
+			return config.Config{}, "", "", fmt.Errorf("auto provider has no available local provider or API key")
 		}
 		return out, providerName, modelName, nil
 	}

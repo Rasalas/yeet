@@ -71,7 +71,7 @@ type modelsLoadedMsg struct {
 }
 
 var labels = map[string]string{
-	"auto":       "Auto (cheapest available)",
+	"auto":       "Auto (native first, then cheapest API)",
 	"anthropic":  "Anthropic",
 	"openai":     "OpenAI",
 	"ollama":     "Ollama (local)",
