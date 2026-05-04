@@ -162,10 +162,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if e.name == "auto" {
 				break
 			}
-			if providerUsesNativeConfig(m.cfg, e.name) {
-				m.message = styleHelp.Render(fmt.Sprintf("  %s uses its native CLI model/config", e.label))
-				break
-			}
 			m.picking = true
 			m.pickProvider = e.name
 			m.pickLoading = true
@@ -178,6 +174,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "r":
 			e := m.entries[m.cursor]
 			if providerUsesNativeConfig(m.cfg, e.name) {
+				if err := m.saveModel(e.name, ""); err != nil {
+					m.message = styleDanger.Render(fmt.Sprintf("  ✗ Failed to save config: %v", err))
+				} else {
+					m.entries[m.cursor].model = ""
+					m.message = styleSuccess.Render(fmt.Sprintf("  ✓ %s reset to native CLI config", e.label))
+				}
 				break
 			}
 			def := config.DefaultModel(e.name)

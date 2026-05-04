@@ -181,12 +181,10 @@ func runYeet(cmd *cobra.Command, args []string) error {
 		fmt.Printf("  %s✓%s %spushed to%s origin/%s\n", term.Green, term.Reset, term.Dim, term.Reset, branch)
 	}
 
-	if usage != nil && usage.InputTokens > 0 {
-		costLine := fmt.Sprintf("%s · %s", usage.FormatTokens(), usage.Model)
-		if cost, ok := usage.Cost(); ok {
-			costLine = fmt.Sprintf("%s · %s · %s", cost, usage.FormatTokens(), usage.Model)
+	if usage != nil {
+		if line := usageSummary(*usage); line != "" {
+			fmt.Printf("\n  %s%s%s\n\n", term.Dim, line, term.Reset)
 		}
-		fmt.Printf("\n  %s%s%s\n\n", term.Dim, costLine, term.Reset)
 	}
 
 	return nil

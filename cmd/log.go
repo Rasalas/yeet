@@ -140,12 +140,8 @@ func runLog(cmd *cobra.Command, args []string) error {
 	}
 
 	// 8. Usage
-	if usage.InputTokens > 0 {
-		costLine := fmt.Sprintf("%s · %s", usage.FormatTokens(), usage.Model)
-		if cost, ok := usage.Cost(); ok {
-			costLine = fmt.Sprintf("%s · %s · %s", cost, usage.FormatTokens(), usage.Model)
-		}
-		fmt.Printf("\n  %s%s%s\n", term.Dim, costLine, term.Reset)
+	if line := usageSummary(usage); line != "" {
+		fmt.Printf("\n  %s%s%s\n", term.Dim, line, term.Reset)
 	}
 	fmt.Println()
 

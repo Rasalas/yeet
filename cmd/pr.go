@@ -210,12 +210,10 @@ func runPR(cmd *cobra.Command, args []string) error {
 	fmt.Printf("  %s✓%s %s PR created: %s\n", term.Green, term.Reset, f.Name(), url)
 
 	// 9. Usage/cost
-	if usage != nil && usage.InputTokens > 0 {
-		costLine := fmt.Sprintf("%s · %s", usage.FormatTokens(), usage.Model)
-		if cost, ok := usage.Cost(); ok {
-			costLine = fmt.Sprintf("%s · %s · %s", cost, usage.FormatTokens(), usage.Model)
+	if usage != nil {
+		if line := usageSummary(*usage); line != "" {
+			fmt.Printf("\n  %s%s%s\n\n", term.Dim, line, term.Reset)
 		}
-		fmt.Printf("\n  %s%s%s\n\n", term.Dim, costLine, term.Reset)
 	}
 
 	return nil

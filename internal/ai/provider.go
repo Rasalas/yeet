@@ -263,6 +263,9 @@ func (p *AutoProvider) GenerateCommitMessageStream(ctx CommitContext, onToken fu
 
 func autoDisplayModel(rp config.ResolvedProvider) string {
 	if rp.Protocol == config.ProtocolACP {
+		if rp.Model != "" {
+			return rp.Name + " · " + rp.Model
+		}
 		return rp.Name + " (native CLI config)"
 	}
 	if rp.Model != "" {

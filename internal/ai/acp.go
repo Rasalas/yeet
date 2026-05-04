@@ -97,9 +97,9 @@ func (p *ACPProvider) GenerateCommitMessageStream(ctx CommitContext, onToken fun
 	runCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	conn, err := startACP(runCtx, p.Command, p.Args, cwd)
+	conn, err := startACP(runCtx, p.Command, p.commandArgs(), cwd)
 	if err != nil {
-		return "", Usage{}, fmt.Errorf("failed to start %s ACP agent (%s): %w", p.Name, acpCommandLine(p.Command, p.Args), err)
+		return "", Usage{}, fmt.Errorf("failed to start %s ACP agent (%s): %w", p.Name, acpCommandLine(p.Command, p.commandArgs()), err)
 	}
 	defer conn.close()
 
@@ -121,18 +121,27 @@ func (p *ACPProvider) GenerateCommitMessageStream(ctx CommitContext, onToken fun
 		return "", Usage{}, err
 	}
 
+	claudeOptions := map[string]any{
+		"tools": []any{},
+	}
+	if p.Model != "" {
+		claudeOptions["model"] = p.Model
+	}
+	meta := map[string]any{
+		"disableBuiltInTools": true,
+		"systemPrompt":        ctx.EffectivePrompt(),
+		"claudeCode": map[string]any{
+			"options": claudeOptions,
+		},
+	}
+	if p.Model != "" {
+		meta["model"] = p.Model
+	}
+
 	result, err := conn.call(2, "session/new", map[string]any{
 		"cwd":        cwd,
 		"mcpServers": []any{},
-		"_meta": map[string]any{
-			"disableBuiltInTools": true,
-			"systemPrompt":        ctx.EffectivePrompt(),
-			"claudeCode": map[string]any{
-				"options": map[string]any{
-					"tools": []any{},
-				},
-			},
-		},
+		"_meta":      meta,
 	}, nil)
 	if err != nil {
 		return "", Usage{}, err
@@ -441,15 +450,44 @@ func cleanACPCommitMessage(message string) string {
 
 func (p *ACPProvider) usageModel() string {
 	if p.Model != "" {
+		if p.Name != "" {
+			return p.Name + " · " + p.Model
+		}
 		return p.Model
 	}
 	if p.Name != "" {
-		return p.Name + " (native)"
+		return p.Name + " (native config)"
 	}
 	return "acp"
+}
+
+func (p *ACPProvider) commandArgs() []string {
+	args := append([]string(nil), p.Args...)
+	if p.Model == "" || p.Name != "codex" || hasCodexModelOverride(args) {
+		return args
+	}
+	return append(args, "-c", fmt.Sprintf("model=%q", p.Model))
 }
 
 func acpCommandLine(command string, args []string) string {
 	parts := append([]string{command}, args...)
 	return strings.Join(parts, " ")
+}
+
+func hasCodexModelOverride(args []string) bool {
+	for i, arg := range args {
+		if arg == "-m" || arg == "--model" {
+			return true
+		}
+		if (arg == "-c" || arg == "--config") && i+1 < len(args) && strings.HasPrefix(args[i+1], "model=") {
+			return true
+		}
+		if strings.HasPrefix(arg, "--model=") || strings.HasPrefix(arg, "-m=") {
+			return true
+		}
+		if strings.HasPrefix(arg, "--config=model=") || strings.HasPrefix(arg, "-c=model=") || strings.HasPrefix(arg, "model=") {
+			return true
+		}
+	}
+	return false
 }

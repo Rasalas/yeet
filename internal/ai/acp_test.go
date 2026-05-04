@@ -32,8 +32,24 @@ func TestACPProviderGenerateCommitMessage(t *testing.T) {
 	if streamed.String() != "fix(acp): use fake acp" {
 		t.Fatalf("streamed = %q", streamed.String())
 	}
-	if usage.Model != "fake (native)" {
+	if usage.Model != "fake (native config)" {
 		t.Fatalf("usage model = %q", usage.Model)
+	}
+}
+
+func TestACPProviderCodexModelArgs(t *testing.T) {
+	provider := &ACPProvider{Name: "codex", Args: []string{"-y", "@zed-industries/codex-acp"}, Model: "gpt-5.4-mini"}
+	got := strings.Join(provider.commandArgs(), " ")
+	if !strings.Contains(got, `model="gpt-5.4-mini"`) {
+		t.Fatalf("commandArgs() = %q", got)
+	}
+}
+
+func TestACPProviderKeepsExplicitCodexModelArgs(t *testing.T) {
+	provider := &ACPProvider{Name: "codex", Args: []string{"-c", `model="gpt-5.5"`}, Model: "gpt-5.4-mini"}
+	got := provider.commandArgs()
+	if len(got) != 2 {
+		t.Fatalf("commandArgs() = %v, want original args only", got)
 	}
 }
 

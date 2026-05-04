@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/rasalas/yeet/internal/ai"
 	"github.com/rasalas/yeet/internal/git"
 	"github.com/rasalas/yeet/internal/term"
 	"github.com/spf13/cobra"
@@ -175,5 +176,20 @@ func TestStreamedPreviewRenderedLinesPlain(t *testing.T) {
 func TestRenderedBlockClearLinesMultiple(t *testing.T) {
 	if got := term.RenderedBlockClearLines(5, 2); got != 8 {
 		t.Fatalf("RenderedBlockClearLines() = %d, want %d", got, 8)
+	}
+}
+
+func TestUsageSummaryShowsNativeModelWithoutTokens(t *testing.T) {
+	got := usageSummary(ai.Usage{Model: "codex · gpt-5.4-mini"})
+	if got != "codex · gpt-5.4-mini" {
+		t.Fatalf("usageSummary() = %q", got)
+	}
+}
+
+func TestUsageSummaryShowsCostTokensAndModel(t *testing.T) {
+	got := usageSummary(ai.Usage{Model: "gpt-4o-mini", InputTokens: 1000, OutputTokens: 50})
+	want := "$0.0002 · 1.0k in / 50 out · gpt-4o-mini"
+	if got != want {
+		t.Fatalf("usageSummary() = %q, want %q", got, want)
 	}
 }

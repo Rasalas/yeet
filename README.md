@@ -159,16 +159,20 @@ The default adapters are launched with `npx`:
 ```toml
 [custom.codex]
 protocol = "acp"
+model = "gpt-5.4-mini"  # optional; omit to use ~/.codex/config.toml
 command = "npx"
 args = ["-y", "@zed-industries/codex-acp"]
 
 [custom.claude]
 protocol = "acp"
+model = "sonnet"  # optional; omit to use Claude's native config
 command = "npx"
 args = ["-y", "@agentclientprotocol/claude-agent-acp"]
 ```
 
 These adapters use the agent's own auth, billing, and config (for example `~/.codex/config.toml` or `~/.claude/`). yeet does not store API keys for ACP providers. To keep commit-message generation narrow, yeet sends the staged git context directly, advertises no client file-system or terminal capabilities, and automatically rejects ACP permission requests.
+
+You can also set ACP models from `yeet config` with `m`. For Codex, yeet passes the selected model to the ACP adapter as `-c model="..."`; leaving it unset uses the model from Codex's native config.
 
 You can add custom providers that use the OpenAI Chat Completions format:
 
