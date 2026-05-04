@@ -75,6 +75,8 @@ var labels = map[string]string{
 	"anthropic":  "Anthropic",
 	"openai":     "OpenAI",
 	"ollama":     "Ollama (local)",
+	"codex":      "Codex CLI (ACP)",
+	"claude":     "Claude Code (ACP)",
 	"google":     "Google Gemini",
 	"groq":       "Groq",
 	"openrouter": "OpenRouter",
@@ -160,6 +162,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if e.name == "auto" {
 				break
 			}
+			if providerUsesNativeConfig(m.cfg, e.name) {
+				m.message = styleHelp.Render(fmt.Sprintf("  %s uses its native CLI model/config", e.label))
+				break
+			}
 			m.picking = true
 			m.pickProvider = e.name
 			m.pickLoading = true
@@ -171,6 +177,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.fetchModelsCmd()
 		case "r":
 			e := m.entries[m.cursor]
+			if providerUsesNativeConfig(m.cfg, e.name) {
+				break
+			}
 			def := config.DefaultModel(e.name)
 			if def == "" || e.name == "auto" {
 				break
@@ -374,8 +383,7 @@ func (m model) View() string {
 
 		// Key status (simplified: just ✓ or ✗)
 		if e.name != "auto" {
-			entry, inReg := config.Registry[e.name]
-			if !inReg || entry.NeedsAuth {
+			if providerNeedsAuth(m.cfg, e.name) {
 				if e.key.Found {
 					b.WriteString("  " + styleSuccess.Render("✓"))
 				} else {
@@ -392,6 +400,9 @@ func (m model) View() string {
 				b.WriteString(styleHelp.Render("    → " + e.model))
 				b.WriteString("\n")
 			}
+		} else if providerUsesNativeConfig(m.cfg, e.name) && e.model == "" {
+			b.WriteString(styleHelp.Render("    native CLI config"))
+			b.WriteString("\n")
 		} else if e.model != "" {
 			def := config.DefaultModel(e.name)
 			if def != "" && e.model != def {
@@ -430,6 +441,16 @@ func (m model) View() string {
 	b.WriteString("\n")
 
 	return b.String()
+}
+
+func providerNeedsAuth(cfg config.Config, provider string) bool {
+	rp, ok := cfg.ResolveProviderFull(provider)
+	return !ok || rp.NeedsAuth
+}
+
+func providerUsesNativeConfig(cfg config.Config, provider string) bool {
+	rp, ok := cfg.ResolveProviderFull(provider)
+	return ok && rp.Protocol == config.ProtocolACP
 }
 
 func (m model) viewModelPicker() string {

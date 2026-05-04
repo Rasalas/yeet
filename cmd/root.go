@@ -222,6 +222,17 @@ func generateOrFallback() (string, *ai.Usage, bool, *commitRunCapture, error) {
 	provider, providerErr := ai.NewProvider(cfg)
 
 	if providerErr != nil {
+		if !providerNeedsYeetAuth(cfg) {
+			fmt.Printf("  AI provider unavailable: %v\n\n", providerErr)
+			fmt.Println("  Enter commit message:")
+			msg, err := promptForMessage("")
+			if err != nil {
+				return "", nil, false, nil, err
+			}
+			fmt.Printf("\n  tip: run `yeet config` or `yeet config edit` to adjust the provider\n\n")
+			return msg, nil, false, nil, nil
+		}
+
 		fmt.Printf("  No API key found for %s.\n\n", cfg.Provider)
 		fmt.Println("  Set up AI now? (y/n)")
 
@@ -348,6 +359,14 @@ func generateStreaming(sp ai.StreamingProvider, ctx ai.CommitContext) (string, a
 func quickSetup(cfg config.Config) error {
 	fmt.Println()
 	return readAndSaveKey(cfg.Provider)
+}
+
+func providerNeedsYeetAuth(cfg config.Config) bool {
+	if cfg.Provider == "auto" {
+		return true
+	}
+	rp, ok := cfg.ResolveProviderFull(cfg.Provider)
+	return !ok || rp.NeedsAuth
 }
 
 func promptForMessage(initial string) (string, error) {

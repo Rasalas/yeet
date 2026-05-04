@@ -23,6 +23,13 @@ func NewProvider(cfg config.Config) (Provider, error) {
 }
 
 func buildProvider(rp config.ResolvedProvider) (Provider, error) {
+	if rp.Protocol == config.ProtocolACP {
+		if rp.Command == "" {
+			return nil, fmt.Errorf("%s ACP command is not configured", rp.Name)
+		}
+		return &ACPProvider{Name: rp.Name, Command: rp.Command, Args: rp.Args, Model: rp.Model}, nil
+	}
+
 	if rp.NeedsAuth {
 		key, err := keyring.GetWithEnv(rp.Name, rp.Env)
 		if err != nil {
@@ -62,8 +69,8 @@ func autoCandidates(cfg config.Config) []candidate {
 		if !ok || rp.Model == "" {
 			continue
 		}
-		// Skip Ollama for auto-select (local, no cost info)
-		if rp.Protocol == config.ProtocolOllama {
+		// Skip local/agent providers for auto-select (no comparable cost info).
+		if rp.Protocol == config.ProtocolOllama || rp.Protocol == config.ProtocolACP {
 			continue
 		}
 		if !rp.NeedsAuth {

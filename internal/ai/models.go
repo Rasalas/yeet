@@ -29,6 +29,8 @@ func FetchModels(ctx context.Context, provider string, cfg config.Config) ([]str
 		return fetchAnthropic(ctx, rp)
 	case config.ProtocolOllama:
 		return fetchOllama(ctx, rp)
+	case config.ProtocolACP:
+		return config.KnownModels[provider], nil
 	default:
 		return fetchOpenAICompatible(ctx, rp)
 	}

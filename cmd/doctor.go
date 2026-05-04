@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/rasalas/yeet/internal/ai"
 	"github.com/rasalas/yeet/internal/config"
@@ -41,11 +42,17 @@ func runDoctor() error {
 		}
 	} else if rp, ok := cfg.ResolveProviderFull(provider); ok {
 		model = rp.Model
+		if rp.Protocol == config.ProtocolACP && model == "" {
+			model = "(native CLI config)"
+		}
 	}
 
 	fmt.Println()
 	fmt.Printf("  %sProvider%s  %s\n", term.Bold, term.Reset, provider)
 	fmt.Printf("  %sModel%s     %s\n", term.Bold, term.Reset, model)
+	if rp, ok := cfg.ResolveProviderFull(provider); ok && rp.Protocol == config.ProtocolACP {
+		fmt.Printf("  %sCommand%s   %s\n", term.Bold, term.Reset, strings.Join(append([]string{rp.Command}, rp.Args...), " "))
+	}
 
 	// Config path
 	if path, err := config.Path(); err == nil {
@@ -68,10 +75,10 @@ func runDoctor() error {
 
 	fmt.Printf("\n  %sKeys%s\n\n", term.Bold, term.Reset)
 	for _, p := range providers {
-		entry, inRegistry := config.Registry[p]
 		info := status[p]
+		rp, ok := cfg.ResolveProviderFull(p)
 
-		if !inRegistry || entry.NeedsAuth {
+		if !ok || rp.NeedsAuth {
 			if info.Found {
 				fmt.Printf("  %s\u2713%s  %-16s%s%s%s\n", term.Green, term.Reset, p, term.Dim, info.Source, term.Reset)
 			} else {
@@ -81,6 +88,8 @@ func runDoctor() error {
 				}
 				fmt.Printf("  %s\u2717%s  %-16s%snot found  \u2190 %s%s\n", term.Red, term.Reset, p, term.Dim, hint, term.Reset)
 			}
+		} else if rp.Protocol == config.ProtocolACP {
+			fmt.Printf("  %s\u00b7%s  %-16s%suses native CLI auth%s\n", term.Dim, term.Reset, p, term.Dim, term.Reset)
 		} else {
 			fmt.Printf("  %s\u00b7%s  %-16s%sno auth needed%s\n", term.Dim, term.Reset, p, term.Dim, term.Reset)
 		}
@@ -94,7 +103,15 @@ func runDoctor() error {
 			found++
 		}
 	}
-	if found == 0 {
+	activeReadyWithoutKey := false
+	if provider != "auto" {
+		if rp, ok := cfg.ResolveProviderFull(provider); ok && !rp.NeedsAuth {
+			activeReadyWithoutKey = true
+		}
+	}
+	if len(problems) == 0 && activeReadyWithoutKey {
+		fmt.Printf("  %s\u2713%s Everything looks good.\n", term.Green, term.Reset)
+	} else if found == 0 {
 		fmt.Printf("  %sNo API keys configured. Run %syeet auth set <provider>%s to get started.%s\n", term.Dim, term.Reset+term.Bold, term.Reset+term.Dim, term.Reset)
 	} else if len(problems) == 0 {
 		fmt.Printf("  %s\u2713%s Everything looks good.\n", term.Green, term.Reset)

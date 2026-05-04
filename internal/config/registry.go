@@ -7,15 +7,18 @@ const (
 	ProtocolAnthropic Protocol = "anthropic"
 	ProtocolOpenAI    Protocol = "openai"
 	ProtocolOllama    Protocol = "ollama"
+	ProtocolACP       Protocol = "acp"
 )
 
 // ProviderEntry holds the static defaults for a known provider.
 type ProviderEntry struct {
-	DefaultModel string
-	DefaultURL   string
-	DefaultEnv   string
-	Protocol     Protocol
-	NeedsAuth    bool
+	DefaultModel   string
+	DefaultURL     string
+	DefaultEnv     string
+	DefaultCommand string
+	DefaultArgs    []string
+	Protocol       Protocol
+	NeedsAuth      bool
 }
 
 // Registry maps provider names to their static defaults.
@@ -41,6 +44,20 @@ var Registry = map[string]ProviderEntry{
 		DefaultEnv:   "",
 		Protocol:     ProtocolOllama,
 		NeedsAuth:    false,
+	},
+	"codex": {
+		DefaultModel:   "",
+		DefaultCommand: "npx",
+		DefaultArgs:    []string{"-y", "@zed-industries/codex-acp"},
+		Protocol:       ProtocolACP,
+		NeedsAuth:      false,
+	},
+	"claude": {
+		DefaultModel:   "",
+		DefaultCommand: "npx",
+		DefaultArgs:    []string{"-y", "@agentclientprotocol/claude-agent-acp"},
+		Protocol:       ProtocolACP,
+		NeedsAuth:      false,
 	},
 	"google": {
 		DefaultModel: "gemini-3-flash-preview",
@@ -78,6 +95,8 @@ type ResolvedProvider struct {
 	Model     string
 	URL       string
 	Env       string
+	Command   string
+	Args      []string
 	Protocol  Protocol
 	NeedsAuth bool
 }

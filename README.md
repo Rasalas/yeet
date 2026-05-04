@@ -86,6 +86,8 @@ Opens a TUI where you can select your AI provider, set models, and manage keys.
 | Anthropic | `claude-haiku-4-5-20251001` |
 | OpenAI | `gpt-4o-mini` |
 | Ollama (local) | `llama3` |
+| Codex CLI via ACP | native Codex config |
+| Claude Code via ACP | native Claude config |
 
 **Well-known providers** (OpenAI-compatible API):
 
@@ -103,6 +105,8 @@ yeet auth set anthropic
 ```
 
 Keys are stored in the OS keyring (macOS Keychain, Windows Credential Manager, Linux Secret Service). Environment variables (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, etc.) are used as fallback.
+
+Codex/Claude ACP providers use their own CLI login/config and are not managed through `yeet auth`.
 
 If you have keys in environment variables or OpenCode's `auth.json`, import them into the keyring:
 
@@ -132,6 +136,30 @@ model = "gpt-4o-mini"
 model = "llama3"
 url = "http://localhost:11434"
 ```
+
+### Local agent providers (ACP)
+
+`codex` and `claude` use local Agent Client Protocol adapters instead of yeet-managed API keys:
+
+```toml
+provider = "codex"  # or "claude"
+```
+
+The default adapters are launched with `npx`:
+
+```toml
+[custom.codex]
+protocol = "acp"
+command = "npx"
+args = ["-y", "@zed-industries/codex-acp"]
+
+[custom.claude]
+protocol = "acp"
+command = "npx"
+args = ["-y", "@agentclientprotocol/claude-agent-acp"]
+```
+
+These adapters use the agent's own auth, billing, and config (for example `~/.codex/config.toml` or `~/.claude/`). yeet does not store API keys for ACP providers. To keep commit-message generation narrow, yeet sends the staged git context directly, advertises no client file-system or terminal capabilities, and automatically rejects ACP permission requests.
 
 You can add custom providers that use the OpenAI Chat Completions format:
 

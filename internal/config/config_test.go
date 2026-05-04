@@ -35,6 +35,8 @@ func TestDefaultModel(t *testing.T) {
 		{"anthropic", "claude-haiku-4-5-20251001"},
 		{"openai", "gpt-4o-mini"},
 		{"ollama", "llama3"},
+		{"codex", ""},
+		{"claude", ""},
 		{"google", "gemini-3-flash-preview"},
 		{"groq", "llama-3.3-70b-versatile"},
 		{"nonexistent", ""},
@@ -118,6 +120,26 @@ func TestResolveProviderFull(t *testing.T) {
 		}
 	})
 
+	t.Run("codex is acp no-auth", func(t *testing.T) {
+		cfg := DefaultConfig()
+		rp, ok := cfg.ResolveProviderFull("codex")
+		if !ok {
+			t.Fatal("returned false")
+		}
+		if rp.NeedsAuth {
+			t.Error("NeedsAuth should be false for codex")
+		}
+		if rp.Protocol != ProtocolACP {
+			t.Errorf("Protocol = %q", rp.Protocol)
+		}
+		if rp.Command != "npx" {
+			t.Errorf("Command = %q", rp.Command)
+		}
+		if len(rp.Args) == 0 {
+			t.Error("Args should contain the codex ACP package")
+		}
+	})
+
 	t.Run("purely custom defaults to openai protocol", func(t *testing.T) {
 		cfg := DefaultConfig()
 		cfg.Custom = map[string]ProviderConfig{
@@ -132,6 +154,26 @@ func TestResolveProviderFull(t *testing.T) {
 		}
 		if !rp.NeedsAuth {
 			t.Error("NeedsAuth should be true for custom provider")
+		}
+	})
+
+	t.Run("custom acp provider is no-auth", func(t *testing.T) {
+		cfg := DefaultConfig()
+		cfg.Custom = map[string]ProviderConfig{
+			"myagent": {Protocol: ProtocolACP, Command: "my-agent", Args: []string{"--acp"}},
+		}
+		rp, ok := cfg.ResolveProviderFull("myagent")
+		if !ok {
+			t.Fatal("returned false")
+		}
+		if rp.Protocol != ProtocolACP {
+			t.Errorf("Protocol = %q, want acp", rp.Protocol)
+		}
+		if rp.NeedsAuth {
+			t.Error("NeedsAuth should be false for custom ACP provider")
+		}
+		if rp.Command != "my-agent" || len(rp.Args) != 1 || rp.Args[0] != "--acp" {
+			t.Errorf("command = %q args = %v", rp.Command, rp.Args)
 		}
 	})
 
@@ -261,6 +303,23 @@ func TestValidate(t *testing.T) {
 		problems := cfg.Validate()
 		if len(problems) != 0 {
 			t.Errorf("unexpected problems for registry override: %v", problems)
+		}
+	})
+
+	t.Run("custom acp missing command", func(t *testing.T) {
+		cfg := DefaultConfig()
+		cfg.Custom = map[string]ProviderConfig{
+			"myagent": {Protocol: ProtocolACP},
+		}
+		problems := cfg.Validate()
+		found := false
+		for _, p := range problems {
+			if strings.Contains(p, "missing command") {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("expected missing command warning, got: %v", problems)
 		}
 	})
 }

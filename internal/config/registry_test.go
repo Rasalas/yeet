@@ -14,7 +14,7 @@ func TestRegistryCompleteness(t *testing.T) {
 func TestRegistryProtocols(t *testing.T) {
 	for name, entry := range Registry {
 		switch entry.Protocol {
-		case ProtocolAnthropic, ProtocolOpenAI, ProtocolOllama:
+		case ProtocolAnthropic, ProtocolOpenAI, ProtocolOllama, ProtocolACP:
 			// valid
 		default:
 			t.Errorf("Registry[%q] has unknown protocol %q", name, entry.Protocol)
@@ -24,6 +24,12 @@ func TestRegistryProtocols(t *testing.T) {
 
 func TestRegistryDefaults(t *testing.T) {
 	for name, entry := range Registry {
+		if entry.Protocol == ProtocolACP {
+			if entry.DefaultCommand == "" {
+				t.Errorf("Registry[%q] ACP provider has empty DefaultCommand", name)
+			}
+			continue
+		}
 		if entry.DefaultModel == "" {
 			t.Errorf("Registry[%q] has empty DefaultModel", name)
 		}

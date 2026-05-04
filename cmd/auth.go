@@ -66,7 +66,13 @@ func runAuthStatus(cmd *cobra.Command, args []string) error {
 	fmt.Printf("\n  %sAPI Keys%s\n\n", term.Bold, term.Reset)
 	for _, p := range providers {
 		info := status[p]
-		if info.Found {
+		if !providerUsesYeetKey(cfg, p) {
+			authText := "no auth needed"
+			if providerUsesNativeCLIAuth(cfg, p) {
+				authText = "uses native CLI auth"
+			}
+			fmt.Printf("  %s\u00b7%s  %-16s%s%s%s\n", term.Dim, term.Reset, p, term.Dim, authText, term.Reset)
+		} else if info.Found {
 			source := string(info.Source)
 			line := fmt.Sprintf("  %s\u2713%s  %-16s%s%s%s", term.Green, term.Reset, p, term.Dim, source, term.Reset)
 			if info.Source != keyring.SourceKeyring {
@@ -86,6 +92,13 @@ func runAuthSet(cmd *cobra.Command, args []string) error {
 	providers := allProviders()
 	if !isValidProvider(provider, providers) {
 		return fmt.Errorf("unknown provider: %s (valid: %s)", provider, strings.Join(providers, ", "))
+	}
+	cfg, _ := config.Load()
+	if !providerUsesYeetKey(cfg, provider) {
+		if providerUsesNativeCLIAuth(cfg, provider) {
+			return fmt.Errorf("%s uses native CLI authentication; run that CLI's login command instead", provider)
+		}
+		return fmt.Errorf("%s does not use yeet-managed API keys", provider)
 	}
 
 	return readAndSaveKey(provider)
@@ -146,6 +159,16 @@ func runAuthImport(cmd *cobra.Command, args []string) error {
 
 	imported := 0
 	for _, p := range targets {
+		if !providerUsesYeetKey(cfg, p) {
+			if len(args) == 1 {
+				authText := "no auth needed"
+				if providerUsesNativeCLIAuth(cfg, p) {
+					authText = "uses native CLI auth"
+				}
+				fmt.Printf("  %s\u00b7%s %s: %s\n", term.Dim, term.Reset, p, authText)
+			}
+			continue
+		}
 		key, source := keyring.Resolve(p, envs[p])
 		if key == "" {
 			if len(args) == 1 {
@@ -202,4 +225,14 @@ func isValidProvider(p string, providers []string) bool {
 		}
 	}
 	return false
+}
+
+func providerUsesYeetKey(cfg config.Config, provider string) bool {
+	rp, ok := cfg.ResolveProviderFull(provider)
+	return !ok || rp.NeedsAuth
+}
+
+func providerUsesNativeCLIAuth(cfg config.Config, provider string) bool {
+	rp, ok := cfg.ResolveProviderFull(provider)
+	return ok && rp.Protocol == config.ProtocolACP
 }

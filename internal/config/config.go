@@ -12,9 +12,12 @@ import (
 )
 
 type ProviderConfig struct {
-	Model string `toml:"model,omitempty"`
-	URL   string `toml:"url,omitempty"`
-	Env   string `toml:"env,omitempty"`
+	Model    string   `toml:"model,omitempty"`
+	URL      string   `toml:"url,omitempty"`
+	Env      string   `toml:"env,omitempty"`
+	Protocol Protocol `toml:"protocol,omitempty"`
+	Command  string   `toml:"command,omitempty"`
+	Args     []string `toml:"args,omitempty"`
 }
 
 type PricingOverride struct {
@@ -36,6 +39,8 @@ var KnownModels = map[string][]string{
 	"anthropic":  {"claude-haiku-4-5-20251001", "claude-sonnet-4-6", "claude-opus-4-6"},
 	"openai":     {"gpt-4o-mini", "gpt-4.1-nano", "gpt-4.1-mini", "gpt-4.1", "gpt-4o", "o4-mini"},
 	"ollama":     {"llama3", "llama3.1", "gemma2", "mistral", "codellama", "qwen2.5-coder"},
+	"codex":      {},
+	"claude":     {},
 	"google":     {"gemini-3-flash-preview", "gemini-2.5-flash"},
 	"groq":       {"llama-3.3-70b-versatile", "llama-3.1-8b-instant", "openai/gpt-oss-20b"},
 	"openrouter": {"openrouter/auto", "google/gemini-3-flash-preview", "openai/gpt-4o-mini"},
@@ -184,6 +189,8 @@ func (c Config) ResolveProviderFull(name string) (ResolvedProvider, bool) {
 		Model:     entry.DefaultModel,
 		URL:       entry.DefaultURL,
 		Env:       entry.DefaultEnv,
+		Command:   entry.DefaultCommand,
+		Args:      append([]string(nil), entry.DefaultArgs...),
 		Protocol:  entry.Protocol,
 		NeedsAuth: entry.NeedsAuth,
 	}
@@ -233,6 +240,15 @@ func (c Config) ResolveProviderFull(name string) (ResolvedProvider, bool) {
 		if custom.Env != "" {
 			rp.Env = custom.Env
 		}
+		if custom.Protocol != "" {
+			rp.Protocol = custom.Protocol
+		}
+		if custom.Command != "" {
+			rp.Command = custom.Command
+		}
+		if custom.Args != nil {
+			rp.Args = append([]string(nil), custom.Args...)
+		}
 	}
 
 	// Purely custom provider not in registry
@@ -240,13 +256,17 @@ func (c Config) ResolveProviderFull(name string) (ResolvedProvider, bool) {
 		return ResolvedProvider{}, false
 	}
 	if !inRegistry {
-		rp.Protocol = ProtocolOpenAI
-		rp.NeedsAuth = true
+		if rp.Protocol == "" {
+			rp.Protocol = ProtocolOpenAI
+		}
+		rp.NeedsAuth = rp.Protocol != ProtocolACP && rp.Protocol != ProtocolOllama
+	}
+	if rp.Protocol == ProtocolACP || rp.Protocol == ProtocolOllama {
+		rp.NeedsAuth = false
 	}
 
 	return rp, true
 }
-
 
 // SetModel writes a model to the appropriate config location.
 func (c *Config) SetModel(provider, model string) {
@@ -271,6 +291,15 @@ func (c *Config) SetModel(provider, model string) {
 			if pc.Env == "" {
 				pc.Env = entry.DefaultEnv
 			}
+			if pc.Protocol == "" {
+				pc.Protocol = entry.Protocol
+			}
+			if pc.Command == "" {
+				pc.Command = entry.DefaultCommand
+			}
+			if pc.Args == nil && entry.DefaultArgs != nil {
+				pc.Args = append([]string(nil), entry.DefaultArgs...)
+			}
 		}
 		c.Custom[provider] = pc
 	}
@@ -292,11 +321,26 @@ func (c Config) Validate() []string {
 		if _, ok := Registry[name]; ok {
 			continue // registry providers don't need url
 		}
-		if pc.URL == "" {
-			problems = append(problems, fmt.Sprintf("custom provider %q is missing url", name))
+		proto := pc.Protocol
+		if proto == "" {
+			proto = ProtocolOpenAI
 		}
-		if pc.Env == "" {
-			problems = append(problems, fmt.Sprintf("custom provider %q has no env var set (key must be in keyring)", name))
+		switch proto {
+		case ProtocolACP:
+			if pc.Command == "" {
+				problems = append(problems, fmt.Sprintf("custom ACP provider %q is missing command", name))
+			}
+		case ProtocolOllama:
+			if pc.URL == "" {
+				problems = append(problems, fmt.Sprintf("custom Ollama provider %q is missing url", name))
+			}
+		default:
+			if pc.URL == "" {
+				problems = append(problems, fmt.Sprintf("custom provider %q is missing url", name))
+			}
+			if pc.Env == "" {
+				problems = append(problems, fmt.Sprintf("custom provider %q has no env var set (key must be in keyring)", name))
+			}
 		}
 	}
 
