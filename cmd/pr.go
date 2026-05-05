@@ -120,6 +120,7 @@ func runPR(cmd *cobra.Command, args []string) error {
 		SystemPrompt:  ai.PRPrompt,
 		MaxTokens:     1024,
 	}
+	providerLabel := ai.ConfiguredProviderLabel(cfg)
 
 	var title, body string
 	var usage *ai.Usage
@@ -127,7 +128,7 @@ func runPR(cmd *cobra.Command, args []string) error {
 	streamedPreviewLines := 0
 
 	if sp, ok := provider.(ai.StreamingProvider); ok {
-		msg, u, previewLines, genErr := generateStreamingPR(sp, ctx)
+		msg, u, previewLines, genErr := generateStreamingPR(sp, ctx, providerLabel)
 		if genErr != nil {
 			return fmt.Errorf("AI generation failed: %w", genErr)
 		}
@@ -137,7 +138,7 @@ func runPR(cmd *cobra.Command, args []string) error {
 		streamedPreviewLines = previewLines
 	} else {
 		var s term.Spinner
-		s.Start("Generating PR description...")
+		s.Start(generationLabel("Generating PR description", providerLabel))
 
 		msg, u, genErr := provider.GenerateCommitMessage(ctx)
 		s.Stop()
@@ -248,13 +249,14 @@ func renderPRConfirmation(title, body string, width int) int {
 	return term.RenderedBlockClearLines(previewLines, hintLines)
 }
 
-func generateStreamingPR(sp ai.StreamingProvider, ctx ai.CommitContext) (string, ai.Usage, int, error) {
+func generateStreamingPR(sp ai.StreamingProvider, ctx ai.CommitContext, providerLabel string) (string, ai.Usage, int, error) {
 	var s term.Spinner
-	s.Start("Generating PR description...")
+	s.Start(generationLabel("Generating PR description", providerLabel))
 
 	var previewLines int
 	var previewText strings.Builder
 	started := false
+	configureAttemptStatus(sp, &s, &started, "Generating PR description", providerLabel)
 
 	message, usage, err := sp.GenerateCommitMessageStream(ctx, func(token string) {
 		previewText.WriteString(token)

@@ -71,6 +71,19 @@ func TestPickIsUseCustom(t *testing.T) {
 	}
 }
 
+func TestPrependNativeModelChoice(t *testing.T) {
+	got := prependNativeModelChoice([]string{"gpt-5.4-mini", nativeModelChoice})
+	want := []string{nativeModelChoice, "gpt-5.4-mini"}
+	if len(got) != len(want) {
+		t.Fatalf("prependNativeModelChoice length = %d, want %d (%v)", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("prependNativeModelChoice[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
 func TestProviderModel(t *testing.T) {
 	cfg := config.Config{
 		Anthropic: config.ProviderConfig{Model: "claude-haiku-4-5-20251001"},

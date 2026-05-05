@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/BurntSushi/toml"
 	"github.com/rasalas/yeet/internal/keyring"
@@ -25,14 +26,21 @@ type PricingOverride struct {
 	Output float64 `toml:"output"`
 }
 
+type AutoConfig struct {
+	Order []string `toml:"order,omitempty"`
+}
+
 type Config struct {
 	Provider  string                     `toml:"provider"`
+	Auto      *AutoConfig                `toml:"auto,omitempty"`
 	Anthropic ProviderConfig             `toml:"anthropic"`
 	OpenAI    ProviderConfig             `toml:"openai"`
 	Ollama    ProviderConfig             `toml:"ollama"`
 	Custom    map[string]ProviderConfig  `toml:"custom"`
 	Pricing   map[string]PricingOverride `toml:"pricing"`
 }
+
+var DefaultAutoOrder = []string{"codex", "ollama", "claude", "api"}
 
 // KnownModels lists available models per provider for the TUI picker.
 var KnownModels = map[string][]string{
@@ -45,6 +53,24 @@ var KnownModels = map[string][]string{
 	"groq":       {"llama-3.3-70b-versatile", "llama-3.1-8b-instant", "openai/gpt-oss-20b"},
 	"openrouter": {"openrouter/auto", "google/gemini-3-flash-preview", "openai/gpt-4o-mini"},
 	"mistral":    {"mistral-small-latest", "mistral-large-latest", "codestral-latest"},
+}
+
+func (c Config) AutoOrder() []string {
+	var order []string
+	if c.Auto != nil {
+		order = c.Auto.Order
+	}
+	if len(order) == 0 {
+		order = DefaultAutoOrder
+	}
+	out := make([]string, 0, len(order))
+	for _, item := range order {
+		item = strings.ToLower(strings.TrimSpace(item))
+		if item != "" {
+			out = append(out, item)
+		}
+	}
+	return out
 }
 
 func DefaultConfig() Config {
@@ -314,6 +340,15 @@ func (c Config) Validate() []string {
 			if _, ok := c.Custom[c.Provider]; !ok {
 				problems = append(problems, fmt.Sprintf("unknown provider %q — add it to [custom.%s] in config.toml or use a known provider", c.Provider, c.Provider))
 			}
+		}
+	}
+
+	for _, item := range c.AutoOrder() {
+		if item == "api" {
+			continue
+		}
+		if _, ok := c.ResolveProviderFull(item); !ok {
+			problems = append(problems, fmt.Sprintf("auto order provider %q is unknown", item))
 		}
 	}
 

@@ -1,8 +1,9 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
-	"strings"
+	"time"
 
 	"github.com/rasalas/yeet/internal/ai"
 	"github.com/rasalas/yeet/internal/config"
@@ -11,8 +12,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var doctorAIFlag bool
+
 func init() {
-	rootCmd.AddCommand(&cobra.Command{
+	doctorCmd := &cobra.Command{
 		Use:   "doctor",
 		Short: "Check configuration and provider status",
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -21,7 +24,9 @@ func init() {
 			}
 			return runDoctor()
 		},
-	})
+	}
+	doctorCmd.Flags().BoolVar(&doctorAIFlag, "ai", false, "Run a no-generation provider smoke test")
+	rootCmd.AddCommand(doctorCmd)
 
 }
 
@@ -52,11 +57,14 @@ func runDoctor() error {
 	if provider == "auto" {
 		if autoProvider := ai.AutoProviderName(cfg); autoProvider != "" {
 			fmt.Printf("  %sAuto%s      %s\n", term.Bold, term.Reset, autoProvider)
+			if rp, ok := cfg.ResolveProviderFull(autoProvider); ok && rp.Protocol == config.ProtocolACP {
+				fmt.Printf("  %sCommand%s   %s\n", term.Bold, term.Reset, ai.ProviderCommandLine(rp))
+			}
 		}
 	}
 	fmt.Printf("  %sModel%s     %s\n", term.Bold, term.Reset, model)
 	if rp, ok := cfg.ResolveProviderFull(provider); ok && rp.Protocol == config.ProtocolACP {
-		fmt.Printf("  %sCommand%s   %s\n", term.Bold, term.Reset, strings.Join(append([]string{rp.Command}, rp.Args...), " "))
+		fmt.Printf("  %sCommand%s   %s\n", term.Bold, term.Reset, ai.ProviderCommandLine(rp))
 	}
 
 	// Config path
@@ -66,6 +74,9 @@ func runDoctor() error {
 
 	// Validation
 	problems := cfg.Validate()
+	if provider == "auto" && ai.AutoProviderName(cfg) == "" {
+		problems = append(problems, "auto provider has no available provider from [auto].order")
+	}
 	if len(problems) > 0 {
 		fmt.Printf("\n  %sWarnings%s\n\n", term.Bold, term.Reset)
 		for _, p := range problems {
@@ -100,6 +111,18 @@ func runDoctor() error {
 		}
 	}
 
+	smokeFailed := false
+	if doctorAIFlag {
+		fmt.Printf("\n  %sAI Smoke Test%s\n\n", term.Bold, term.Reset)
+		label, err := runDoctorAISmoke(cfg)
+		if err != nil {
+			smokeFailed = true
+			fmt.Printf("  %s✗%s  %-16s%s%s%s\n", term.Red, term.Reset, label, term.Dim, err, term.Reset)
+		} else {
+			fmt.Printf("  %s✓%s  %s%s%s\n", term.Green, term.Reset, term.Dim, label, term.Reset)
+		}
+	}
+
 	// Summary
 	fmt.Println()
 	found := 0
@@ -114,16 +137,51 @@ func runDoctor() error {
 			activeReadyWithoutKey = true
 		}
 	}
-	if len(problems) == 0 && activeReadyWithoutKey {
+	warnings := len(problems)
+	if smokeFailed {
+		warnings++
+	}
+	if warnings == 0 && activeReadyWithoutKey {
 		fmt.Printf("  %s\u2713%s Everything looks good.\n", term.Green, term.Reset)
 	} else if found == 0 {
 		fmt.Printf("  %sNo API keys configured. Run %syeet auth set <provider>%s to get started.%s\n", term.Dim, term.Reset+term.Bold, term.Reset+term.Dim, term.Reset)
-	} else if len(problems) == 0 {
+	} else if warnings == 0 {
 		fmt.Printf("  %s\u2713%s Everything looks good.\n", term.Green, term.Reset)
 	} else {
-		fmt.Printf("  %s%d warning(s) — see above.%s\n", term.Red, len(problems), term.Reset)
+		fmt.Printf("  %s%d warning(s) — see above.%s\n", term.Red, warnings, term.Reset)
 	}
 	fmt.Println()
 
 	return nil
+}
+
+func runDoctorAISmoke(cfg config.Config) (string, error) {
+	provider := cfg.Provider
+	if provider == "auto" {
+		provider = ai.AutoProviderName(cfg)
+		if provider == "" {
+			return "auto", fmt.Errorf("no available auto provider")
+		}
+	}
+
+	rp, ok := cfg.ResolveProviderFull(provider)
+	if !ok {
+		return provider, fmt.Errorf("unknown provider")
+	}
+
+	label := doctorProviderLabel(cfg, provider)
+	switch rp.Protocol {
+	case config.ProtocolACP:
+		return label, ai.CheckACPProvider(rp)
+	default:
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		_, err := ai.FetchModels(ctx, provider, cfg)
+		return label, err
+	}
+}
+
+func doctorProviderLabel(cfg config.Config, provider string) string {
+	cfg.Provider = provider
+	return ai.ConfiguredProviderLabel(cfg)
 }

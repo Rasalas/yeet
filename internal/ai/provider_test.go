@@ -12,6 +12,7 @@ import (
 func TestAutoProviderPrefersAvailableLocalProvider(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Ollama.URL = "http://127.0.0.1:1"
+	cfg.Auto = &config.AutoConfig{Order: []string{"myagent"}}
 	cfg.Custom = map[string]config.ProviderConfig{
 		"codex":   {Protocol: config.ProtocolACP, Command: "definitely-not-a-command"},
 		"claude":  {Protocol: config.ProtocolACP, Command: "definitely-not-a-command"},
@@ -29,10 +30,14 @@ func TestAutoProviderPrefersAvailableLocalProvider(t *testing.T) {
 func TestAutoProviderFallsBackAfterFailure(t *testing.T) {
 	provider := &AutoProvider{
 		candidates: []candidate{
-			{name: "bad", builder: func() (Provider, error) { return failingProvider{}, nil }},
-			{name: "good", builder: func() (Provider, error) { return fixedProvider{message: "fix: fallback"}, nil }},
+			{name: "bad", model: "bad-model", builder: func() (Provider, error) { return failingProvider{}, nil }},
+			{name: "good", model: "good-model", builder: func() (Provider, error) { return fixedProvider{message: "fix: fallback"}, nil }},
 		},
 	}
+	var attempts []ProviderAttempt
+	provider.SetAttemptCallback(func(attempt ProviderAttempt) {
+		attempts = append(attempts, attempt)
+	})
 
 	msg, usage, err := provider.GenerateCommitMessage(CommitContext{})
 	if err != nil {
@@ -43,6 +48,15 @@ func TestAutoProviderFallsBackAfterFailure(t *testing.T) {
 	}
 	if usage.Model != "good" {
 		t.Fatalf("usage model = %q", usage.Model)
+	}
+	if len(attempts) != 2 {
+		t.Fatalf("attempts = %d, want 2", len(attempts))
+	}
+	if attempts[1].Previous == nil || attempts[1].Previous.Name != "bad" {
+		t.Fatalf("second attempt previous = %#v", attempts[1].Previous)
+	}
+	if attempts[1].Label() != "good · good-model" {
+		t.Fatalf("second attempt label = %q", attempts[1].Label())
 	}
 }
 
@@ -66,6 +80,29 @@ func TestAutoProviderStreamsFallback(t *testing.T) {
 	}
 	if streamed.String() != "fix: stream fallback" {
 		t.Fatalf("streamed = %q", streamed.String())
+	}
+}
+
+func TestProviderCommandLineIncludesCodexModelOverride(t *testing.T) {
+	rp := config.ResolvedProvider{
+		Name:     "codex",
+		Model:    "gpt-5.4-mini",
+		Command:  "npx",
+		Args:     []string{"-y", "@zed-industries/codex-acp@0.13.0"},
+		Protocol: config.ProtocolACP,
+	}
+	got := ProviderCommandLine(rp)
+	if !strings.Contains(got, `model="gpt-5.4-mini"`) {
+		t.Fatalf("ProviderCommandLine() = %q", got)
+	}
+	if !strings.Contains(got, "@zed-industries/codex-acp@0.13.0") {
+		t.Fatalf("ProviderCommandLine() = %q", got)
+	}
+}
+
+func TestUsesDefaultACPPackageAllowsPinnedPackage(t *testing.T) {
+	if !usesDefaultACPPackage([]string{"-y", "@agentclientprotocol/claude-agent-acp@0.32.0"}, "claude") {
+		t.Fatal("expected pinned Claude ACP package to count as default package")
 	}
 }
 

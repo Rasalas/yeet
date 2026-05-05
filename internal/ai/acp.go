@@ -13,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/rasalas/yeet/internal/config"
 )
 
 const acpProtocolVersion = 1
@@ -97,9 +99,10 @@ func (p *ACPProvider) GenerateCommitMessageStream(ctx CommitContext, onToken fun
 	runCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	conn, err := startACP(runCtx, p.Command, p.commandArgs(), cwd)
+	args := p.commandArgs()
+	conn, err := startACP(runCtx, p.Command, args, cwd)
 	if err != nil {
-		return "", Usage{}, fmt.Errorf("failed to start %s ACP agent (%s): %w", p.Name, acpCommandLine(p.Command, p.commandArgs()), err)
+		return "", Usage{}, fmt.Errorf("failed to start %s ACP agent (%s): %w", p.Name, acpCommandLine(p.Command, args), err)
 	}
 	defer conn.close()
 
@@ -121,27 +124,10 @@ func (p *ACPProvider) GenerateCommitMessageStream(ctx CommitContext, onToken fun
 		return "", Usage{}, err
 	}
 
-	claudeOptions := map[string]any{
-		"tools": []any{},
-	}
-	if p.Model != "" {
-		claudeOptions["model"] = p.Model
-	}
-	meta := map[string]any{
-		"disableBuiltInTools": true,
-		"systemPrompt":        ctx.EffectivePrompt(),
-		"claudeCode": map[string]any{
-			"options": claudeOptions,
-		},
-	}
-	if p.Model != "" {
-		meta["model"] = p.Model
-	}
-
 	result, err := conn.call(2, "session/new", map[string]any{
 		"cwd":        cwd,
 		"mcpServers": []any{},
-		"_meta":      meta,
+		"_meta":      acpSessionMeta(ctx.EffectivePrompt(), p.Model),
 	}, nil)
 	if err != nil {
 		return "", Usage{}, err
@@ -222,6 +208,69 @@ func startACP(ctx context.Context, command string, args []string, cwd string) (*
 	go conn.readStdout(stdout)
 
 	return conn, nil
+}
+
+func CheckACPProvider(rp config.ResolvedProvider) error {
+	rp = resolveACPProvider(rp)
+	if rp.Command == "" {
+		return fmt.Errorf("%s ACP command is not configured", rp.Name)
+	}
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+	runCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	provider := &ACPProvider{Name: rp.Name, Command: rp.Command, Args: rp.Args, Model: rp.Model}
+	conn, err := startACP(runCtx, provider.Command, provider.commandArgs(), cwd)
+	if err != nil {
+		return fmt.Errorf("failed to start %s ACP agent (%s): %w", rp.Name, ProviderCommandLine(rp), err)
+	}
+	defer conn.close()
+
+	if _, err := conn.call(1, "initialize", map[string]any{
+		"protocolVersion": acpProtocolVersion,
+		"clientCapabilities": map[string]any{
+			"fs":       map[string]bool{"readTextFile": false, "writeTextFile": false},
+			"terminal": false,
+		},
+		"clientInfo": map[string]string{
+			"name":    "yeet",
+			"title":   "yeet",
+			"version": "0.0.0",
+		},
+	}, nil); err != nil {
+		return err
+	}
+
+	_, err = conn.call(2, "session/new", map[string]any{
+		"cwd":        cwd,
+		"mcpServers": []any{},
+		"_meta":      acpSessionMeta("Smoke test only. Do not generate text.", rp.Model),
+	}, nil)
+	return err
+}
+
+func acpSessionMeta(systemPrompt, model string) map[string]any {
+	claudeOptions := map[string]any{
+		"tools": []any{},
+	}
+	if model != "" {
+		claudeOptions["model"] = model
+	}
+	meta := map[string]any{
+		"disableBuiltInTools": true,
+		"systemPrompt":        systemPrompt,
+		"claudeCode": map[string]any{
+			"options": claudeOptions,
+		},
+	}
+	if model != "" {
+		meta["model"] = model
+	}
+	return meta
 }
 
 func (c *acpConn) readStdout(stdout io.Reader) {

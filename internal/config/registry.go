@@ -48,14 +48,14 @@ var Registry = map[string]ProviderEntry{
 	"codex": {
 		DefaultModel:   "",
 		DefaultCommand: "npx",
-		DefaultArgs:    []string{"-y", "@zed-industries/codex-acp"},
+		DefaultArgs:    []string{"-y", "@zed-industries/codex-acp@0.13.0"},
 		Protocol:       ProtocolACP,
 		NeedsAuth:      false,
 	},
 	"claude": {
 		DefaultModel:   "",
 		DefaultCommand: "npx",
-		DefaultArgs:    []string{"-y", "@agentclientprotocol/claude-agent-acp"},
+		DefaultArgs:    []string{"-y", "@agentclientprotocol/claude-agent-acp@0.32.0"},
 		Protocol:       ProtocolACP,
 		NeedsAuth:      false,
 	},

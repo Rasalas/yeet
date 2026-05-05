@@ -83,6 +83,8 @@ var labels = map[string]string{
 	"mistral":    "Mistral",
 }
 
+const nativeModelChoice = "native CLI config"
+
 func initialModel() model {
 	cfg, _ := config.Load()
 	providers := append([]string{"auto"}, cfg.AllProviders()...)
@@ -214,8 +216,21 @@ func (m *model) handleModelsLoaded(msg modelsLoadedMsg) (tea.Model, tea.Cmd) {
 	} else {
 		m.pickModels = msg.models
 	}
+	if providerUsesNativeConfig(m.cfg, m.pickProvider) {
+		m.pickModels = prependNativeModelChoice(m.pickModels)
+	}
 	m.applyFilter()
 	return m, nil
+}
+
+func prependNativeModelChoice(models []string) []string {
+	out := []string{nativeModelChoice}
+	for _, model := range models {
+		if model != "" && model != nativeModelChoice {
+			out = append(out, model)
+		}
+	}
+	return out
 }
 
 // fuzzyMatch checks if all characters in pattern appear in str in order (case-insensitive).
@@ -251,7 +266,7 @@ func (m *model) applyFilter() {
 	currentModel := m.entries[m.cursor].model
 	placed := false
 	for i, name := range m.pickFiltered {
-		if name == currentModel {
+		if name == currentModel || (currentModel == "" && name == nativeModelChoice) {
 			m.pickCursor = i
 			placed = true
 			break
@@ -311,6 +326,9 @@ func (m *model) updatePicking(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			chosen = m.pickFilter
 		} else if len(m.pickFiltered) > 0 && m.pickCursor < len(m.pickFiltered) {
 			chosen = m.pickFiltered[m.pickCursor]
+			if chosen == nativeModelChoice {
+				chosen = ""
+			}
 		} else {
 			return m, nil
 		}
@@ -320,7 +338,11 @@ func (m *model) updatePicking(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.message = styleDanger.Render(fmt.Sprintf("  ✗ Failed to save config: %v", err))
 		} else {
 			m.entries[m.cursor].model = chosen
-			m.message = styleSuccess.Render(fmt.Sprintf("  ✓ Model for %s set to %s", e.label, chosen))
+			if chosen == "" && providerUsesNativeConfig(m.cfg, e.name) {
+				m.message = styleSuccess.Render(fmt.Sprintf("  ✓ %s reset to native CLI config", e.label))
+			} else {
+				m.message = styleSuccess.Render(fmt.Sprintf("  ✓ Model for %s set to %s", e.label, chosen))
+			}
 		}
 		m.pickModels = nil
 		m.pickFiltered = nil
@@ -521,7 +543,9 @@ func (m model) viewModelPicker() string {
 			b.WriteString(styleBullet.Render("  · ") + styleNormal.Render(name))
 		}
 
-		if name == currentModel {
+		if name == nativeModelChoice && currentModel == "" {
+			b.WriteString(styleLabel.Render("  ← current"))
+		} else if name == currentModel {
 			b.WriteString(styleLabel.Render("  ← current"))
 		} else if defModel != "" && name == defModel {
 			b.WriteString(styleHelp.Render("  (default)"))

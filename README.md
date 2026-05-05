@@ -60,6 +60,7 @@ Pressing Escape cancels safely — if yeet auto-staged, it unstages. If you stag
 | `yeet auth delete <provider>` | Remove API key from keyring |
 | `yeet auth import [provider]` | Import keys from env vars / OpenCode into keyring |
 | `yeet auth reset` | Remove all API keys from keyring |
+| `yeet doctor [--ai]` | Check config, auth, and optionally provider startup |
 | `yeet prompt` | Edit the AI system prompt in `$EDITOR` |
 | `yeet prompt show` | Print the current prompt |
 | `yeet prompt reset` | Reset prompt to default |
@@ -126,7 +127,14 @@ Default order:
 3. `claude` via ACP, if the adapter command is available
 4. API-key providers, sorted by input token cost
 
-Codex/Claude subscription quota or remaining "volume" is not exposed through ACP, so yeet uses this fixed order instead of trying to guess it.
+Codex/Claude subscription quota or remaining "volume" is not exposed through ACP, so yeet uses this fixed order instead of trying to guess it. Override it with:
+
+```toml
+[auto]
+order = ["codex", "ollama", "claude", "api"]
+```
+
+Use `api` as a placeholder for all available API-key providers sorted by input-token cost. If you omit `api`, yeet will not fall back to API-key providers.
 
 ## Config
 
@@ -161,18 +169,20 @@ The default adapters are launched with `npx`:
 protocol = "acp"
 model = "gpt-5.4-mini"  # optional; omit to use ~/.codex/config.toml
 command = "npx"
-args = ["-y", "@zed-industries/codex-acp"]
+args = ["-y", "@zed-industries/codex-acp@0.13.0"]
 
 [custom.claude]
 protocol = "acp"
 model = "sonnet"  # optional; omit to use Claude's native config
 command = "npx"
-args = ["-y", "@agentclientprotocol/claude-agent-acp"]
+args = ["-y", "@agentclientprotocol/claude-agent-acp@0.32.0"]
 ```
 
-These adapters use the agent's own auth, billing, and config (for example `~/.codex/config.toml` or `~/.claude/`). yeet does not store API keys for ACP providers. To keep commit-message generation narrow, yeet sends the staged git context directly, advertises no client file-system or terminal capabilities, and automatically rejects ACP permission requests.
+These adapters use the agent's own auth, billing, and config (for example `~/.codex/config.toml` or `~/.claude/`). yeet does not store API keys for ACP providers. If `codex-acp` or `claude-agent-acp` is installed locally, yeet prefers the local binary over `npx`. To keep commit-message generation narrow, yeet sends the staged git context directly, advertises no client file-system or terminal capabilities, and automatically rejects ACP permission requests.
 
 You can also set ACP models from `yeet config` with `m`. For Codex, yeet passes the selected model to the ACP adapter as `-c model="..."`; leaving it unset uses the model from Codex's native config.
+
+Use `yeet doctor --ai` for a no-generation provider smoke test. For ACP providers this only checks adapter startup, protocol initialization, and session creation; it does not ask the model to generate text.
 
 You can add custom providers that use the OpenAI Chat Completions format:
 

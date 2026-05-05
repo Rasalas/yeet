@@ -25,6 +25,17 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.Ollama.URL != Registry["ollama"].DefaultURL {
 		t.Errorf("Ollama.URL = %q, want %q", cfg.Ollama.URL, Registry["ollama"].DefaultURL)
 	}
+	if got := strings.Join(cfg.AutoOrder(), ","); got != "codex,ollama,claude,api" {
+		t.Errorf("AutoOrder = %q", got)
+	}
+}
+
+func TestAutoOrder(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Auto = &AutoConfig{Order: []string{" OpenAI ", "API", "claude"}}
+	if got := strings.Join(cfg.AutoOrder(), ","); got != "openai,api,claude" {
+		t.Errorf("AutoOrder = %q", got)
+	}
 }
 
 func TestDefaultModel(t *testing.T) {
@@ -137,6 +148,9 @@ func TestResolveProviderFull(t *testing.T) {
 		}
 		if len(rp.Args) == 0 {
 			t.Error("Args should contain the codex ACP package")
+		}
+		if !strings.Contains(strings.Join(rp.Args, " "), "@zed-industries/codex-acp@") {
+			t.Errorf("Args should pin the codex ACP package, got %v", rp.Args)
 		}
 	})
 
@@ -320,6 +334,21 @@ func TestValidate(t *testing.T) {
 		}
 		if !found {
 			t.Errorf("expected missing command warning, got: %v", problems)
+		}
+	})
+
+	t.Run("auto order unknown provider", func(t *testing.T) {
+		cfg := DefaultConfig()
+		cfg.Auto = &AutoConfig{Order: []string{"codex", "missing-provider", "api"}}
+		problems := cfg.Validate()
+		found := false
+		for _, p := range problems {
+			if strings.Contains(p, "auto order provider") {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("expected auto order warning, got: %v", problems)
 		}
 	})
 }

@@ -274,11 +274,12 @@ func generateOrFallback() (string, *ai.Usage, bool, *commitRunCapture, error) {
 		RecentCommits: recentLog,
 		Status:        status,
 	}
+	providerLabel := ai.ConfiguredProviderLabel(cfg)
 
 	// Try streaming if supported
 	if sp, ok := provider.(ai.StreamingProvider); ok {
 		start := time.Now()
-		message, usage, err := generateStreaming(sp, ctx)
+		message, usage, err := generateStreaming(sp, ctx, providerLabel)
 		latencyMs := time.Since(start).Milliseconds()
 		if err != nil {
 			term.ClearLine()
@@ -300,7 +301,7 @@ func generateOrFallback() (string, *ai.Usage, bool, *commitRunCapture, error) {
 	}
 
 	// Non-streaming fallback
-	fmt.Printf("  %sGenerating commit message...%s", term.Dim, term.Reset)
+	fmt.Printf("  %s%s%s", term.Dim, generationLabel("Generating commit message", providerLabel), term.Reset)
 	start := time.Now()
 	message, usage, err := provider.GenerateCommitMessage(ctx)
 	latencyMs := time.Since(start).Milliseconds()
@@ -325,13 +326,14 @@ func generateOrFallback() (string, *ai.Usage, bool, *commitRunCapture, error) {
 	}, nil
 }
 
-func generateStreaming(sp ai.StreamingProvider, ctx ai.CommitContext) (string, ai.Usage, error) {
+func generateStreaming(sp ai.StreamingProvider, ctx ai.CommitContext, providerLabel string) (string, ai.Usage, error) {
 	var s term.Spinner
-	s.Start("Generating...")
+	s.Start(generationLabel("Generating commit message", providerLabel))
 
 	var previewLines int
 	var previewText strings.Builder
 	started := false
+	configureAttemptStatus(sp, &s, &started, "Generating commit message", providerLabel)
 
 	message, usage, err := sp.GenerateCommitMessageStream(ctx, func(token string) {
 		previewText.WriteString(token)

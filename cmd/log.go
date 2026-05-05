@@ -107,11 +107,15 @@ func runLog(cmd *cobra.Command, args []string) error {
 		SystemPrompt: ai.LogPrompt,
 		MaxTokens:    4096,
 	}
+	providerLabel := ai.ConfiguredProviderLabel(cfg)
 
 	var s term.Spinner
-	s.Start("Generating recap...")
+	s.Start(generationLabel("Generating recap", providerLabel))
+	started := false
+	configureAttemptStatus(provider, &s, &started, "Generating recap", providerLabel)
 
 	msg, usage, genErr := provider.GenerateCommitMessage(ctx)
+	started = true
 	s.Stop()
 
 	if genErr != nil {
