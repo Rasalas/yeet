@@ -43,13 +43,38 @@ func TestACPProviderCodexModelArgs(t *testing.T) {
 	if !strings.Contains(got, `model="gpt-5.4-mini"`) {
 		t.Fatalf("commandArgs() = %q", got)
 	}
+	if !strings.Contains(got, `model_reasoning_effort="low"`) {
+		t.Fatalf("commandArgs() = %q", got)
+	}
 }
 
 func TestACPProviderKeepsExplicitCodexModelArgs(t *testing.T) {
 	provider := &ACPProvider{Name: "codex", Args: []string{"-c", `model="gpt-5.5"`}, Model: "gpt-5.4-mini"}
-	got := provider.commandArgs()
-	if len(got) != 2 {
-		t.Fatalf("commandArgs() = %v, want original args only", got)
+	got := strings.Join(provider.commandArgs(), " ")
+	if strings.Contains(got, `model="gpt-5.4-mini"`) {
+		t.Fatalf("commandArgs() = %q, should keep explicit model override", got)
+	}
+	if !strings.Contains(got, `model_reasoning_effort="low"`) {
+		t.Fatalf("commandArgs() = %q", got)
+	}
+}
+
+func TestACPProviderKeepsExplicitCodexReasoningArgs(t *testing.T) {
+	provider := &ACPProvider{Name: "codex", Args: []string{"-c", `model_reasoning_effort="high"`}, ReasoningEffort: "low"}
+	got := strings.Join(provider.commandArgs(), " ")
+	if strings.Count(got, "model_reasoning_effort") != 1 {
+		t.Fatalf("commandArgs() = %q, want one reasoning override", got)
+	}
+	if !strings.Contains(got, `model_reasoning_effort="high"`) {
+		t.Fatalf("commandArgs() = %q", got)
+	}
+}
+
+func TestACPProviderUsesConfiguredCodexReasoning(t *testing.T) {
+	provider := &ACPProvider{Name: "codex", ReasoningEffort: "medium"}
+	got := strings.Join(provider.commandArgs(), " ")
+	if !strings.Contains(got, `model_reasoning_effort="medium"`) {
+		t.Fatalf("commandArgs() = %q", got)
 	}
 }
 

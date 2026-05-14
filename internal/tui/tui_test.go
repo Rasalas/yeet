@@ -119,3 +119,24 @@ func TestProviderModelUnknown(t *testing.T) {
 		t.Errorf("providerModel(nonexistent) = %q, want empty", got)
 	}
 }
+
+func TestProviderReasoningEffort(t *testing.T) {
+	cfg := config.DefaultConfig()
+	if got := providerReasoningEffort(cfg, "codex"); got != "low" {
+		t.Errorf("providerReasoningEffort(codex) = %q, want low", got)
+	}
+	cfg.SetReasoningEffort("codex", "high")
+	if got := providerReasoningEffort(cfg, "codex"); got != "high" {
+		t.Errorf("providerReasoningEffort(codex) = %q, want high", got)
+	}
+}
+
+func TestProviderSupportsReasoningEffort(t *testing.T) {
+	cfg := config.DefaultConfig()
+	if !providerSupportsReasoningEffort(cfg, "codex") {
+		t.Fatal("expected codex to support reasoning effort")
+	}
+	if providerSupportsReasoningEffort(cfg, "claude") {
+		t.Fatal("expected claude to not expose yeet-managed reasoning effort")
+	}
+}

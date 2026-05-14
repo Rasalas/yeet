@@ -12,13 +12,14 @@ const (
 
 // ProviderEntry holds the static defaults for a known provider.
 type ProviderEntry struct {
-	DefaultModel   string
-	DefaultURL     string
-	DefaultEnv     string
-	DefaultCommand string
-	DefaultArgs    []string
-	Protocol       Protocol
-	NeedsAuth      bool
+	DefaultModel           string
+	DefaultReasoningEffort string
+	DefaultURL             string
+	DefaultEnv             string
+	DefaultCommand         string
+	DefaultArgs            []string
+	Protocol               Protocol
+	NeedsAuth              bool
 }
 
 // Registry maps provider names to their static defaults.
@@ -46,11 +47,12 @@ var Registry = map[string]ProviderEntry{
 		NeedsAuth:    false,
 	},
 	"codex": {
-		DefaultModel:   "",
-		DefaultCommand: "npx",
-		DefaultArgs:    []string{"-y", "@zed-industries/codex-acp@0.13.0"},
-		Protocol:       ProtocolACP,
-		NeedsAuth:      false,
+		DefaultModel:           "",
+		DefaultReasoningEffort: "low",
+		DefaultCommand:         "npx",
+		DefaultArgs:            []string{"-y", "@zed-industries/codex-acp@0.13.0"},
+		Protocol:               ProtocolACP,
+		NeedsAuth:              false,
 	},
 	"claude": {
 		DefaultModel:   "",
@@ -91,12 +93,13 @@ var Registry = map[string]ProviderEntry{
 
 // ResolvedProvider is the fully-merged provider configuration ready for use.
 type ResolvedProvider struct {
-	Name      string
-	Model     string
-	URL       string
-	Env       string
-	Command   string
-	Args      []string
-	Protocol  Protocol
-	NeedsAuth bool
+	Name            string
+	Model           string
+	ReasoningEffort string
+	URL             string
+	Env             string
+	Command         string
+	Args            []string
+	Protocol        Protocol
+	NeedsAuth       bool
 }

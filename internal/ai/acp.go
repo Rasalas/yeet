@@ -21,10 +21,11 @@ const acpProtocolVersion = 1
 const acpCallTimeout = 3 * time.Minute
 
 type ACPProvider struct {
-	Name    string
-	Command string
-	Args    []string
-	Model   string
+	Name            string
+	Command         string
+	Args            []string
+	Model           string
+	ReasoningEffort string
 }
 
 type acpConn struct {
@@ -223,7 +224,7 @@ func CheckACPProvider(rp config.ResolvedProvider) error {
 	runCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	provider := &ACPProvider{Name: rp.Name, Command: rp.Command, Args: rp.Args, Model: rp.Model}
+	provider := &ACPProvider{Name: rp.Name, Command: rp.Command, Args: rp.Args, Model: rp.Model, ReasoningEffort: rp.ReasoningEffort}
 	conn, err := startACP(runCtx, provider.Command, provider.commandArgs(), cwd)
 	if err != nil {
 		return fmt.Errorf("failed to start %s ACP agent (%s): %w", rp.Name, ProviderCommandLine(rp), err)
@@ -512,10 +513,20 @@ func (p *ACPProvider) usageModel() string {
 
 func (p *ACPProvider) commandArgs() []string {
 	args := append([]string(nil), p.Args...)
-	if p.Model == "" || p.Name != "codex" || hasCodexModelOverride(args) {
+	if p.Name != "codex" {
 		return args
 	}
-	return append(args, "-c", fmt.Sprintf("model=%q", p.Model))
+	if p.Model != "" && !hasCodexModelOverride(args) {
+		args = append(args, "-c", fmt.Sprintf("model=%q", p.Model))
+	}
+	effort := p.ReasoningEffort
+	if effort == "" {
+		effort = config.LowestReasoningEffort(p.Name)
+	}
+	if effort != "" && !hasCodexReasoningOverride(args) {
+		args = append(args, "-c", fmt.Sprintf("model_reasoning_effort=%q", effort))
+	}
+	return args
 }
 
 func acpCommandLine(command string, args []string) string {
@@ -528,15 +539,40 @@ func hasCodexModelOverride(args []string) bool {
 		if arg == "-m" || arg == "--model" {
 			return true
 		}
-		if (arg == "-c" || arg == "--config") && i+1 < len(args) && strings.HasPrefix(args[i+1], "model=") {
+		if (arg == "-c" || arg == "--config") && i+1 < len(args) && codexConfigOverrideKey(args[i+1]) == "model" {
 			return true
 		}
 		if strings.HasPrefix(arg, "--model=") || strings.HasPrefix(arg, "-m=") {
 			return true
 		}
-		if strings.HasPrefix(arg, "--config=model=") || strings.HasPrefix(arg, "-c=model=") || strings.HasPrefix(arg, "model=") {
+		if (strings.HasPrefix(arg, "--config=") || strings.HasPrefix(arg, "-c=")) && codexConfigOverrideKey(strings.SplitN(arg, "=", 2)[1]) == "model" {
+			return true
+		}
+		if codexConfigOverrideKey(arg) == "model" {
 			return true
 		}
 	}
 	return false
+}
+
+func hasCodexReasoningOverride(args []string) bool {
+	for i, arg := range args {
+		if (arg == "-c" || arg == "--config") && i+1 < len(args) && codexConfigOverrideKey(args[i+1]) == "model_reasoning_effort" {
+			return true
+		}
+		if (strings.HasPrefix(arg, "--config=") || strings.HasPrefix(arg, "-c=")) && codexConfigOverrideKey(strings.SplitN(arg, "=", 2)[1]) == "model_reasoning_effort" {
+			return true
+		}
+		if codexConfigOverrideKey(arg) == "model_reasoning_effort" {
+			return true
+		}
+	}
+	return false
+}
+
+func codexConfigOverrideKey(arg string) string {
+	if key, _, ok := strings.Cut(strings.TrimSpace(arg), "="); ok {
+		return strings.TrimSpace(key)
+	}
+	return ""
 }

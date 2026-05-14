@@ -95,6 +95,9 @@ func TestProviderCommandLineIncludesCodexModelOverride(t *testing.T) {
 	if !strings.Contains(got, `model="gpt-5.4-mini"`) {
 		t.Fatalf("ProviderCommandLine() = %q", got)
 	}
+	if !strings.Contains(got, `model_reasoning_effort="low"`) {
+		t.Fatalf("ProviderCommandLine() = %q", got)
+	}
 	if !strings.Contains(got, "@zed-industries/codex-acp@0.13.0") {
 		t.Fatalf("ProviderCommandLine() = %q", got)
 	}

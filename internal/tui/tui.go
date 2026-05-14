@@ -39,10 +39,11 @@ func helpEntry(key, desc string) string {
 }
 
 type entry struct {
-	name  string
-	label string
-	model string
-	key   keyring.KeyInfo
+	name            string
+	label           string
+	model           string
+	reasoningEffort string
+	key             keyring.KeyInfo
 }
 
 type model struct {
@@ -62,6 +63,11 @@ type model struct {
 	pickFilter   string   // search text
 	pickProvider string   // which provider
 	pickLoading  bool     // show "Fetching..." spinner
+
+	// Reasoning picker state
+	reasoningPicking bool
+	reasoningChoices []string
+	reasoningCursor  int
 }
 
 // modelsLoadedMsg is sent when the async model fetch completes.
@@ -101,6 +107,7 @@ func initialModel() model {
 			e.model = ai.AutoModelName(cfg)
 		} else {
 			e.model = providerModel(cfg, p)
+			e.reasoningEffort = providerReasoningEffort(cfg, p)
 			e.key = keyStatus[p]
 		}
 		entries = append(entries, e)
@@ -124,6 +131,13 @@ func providerModel(cfg config.Config, p string) string {
 	return ""
 }
 
+func providerReasoningEffort(cfg config.Config, p string) string {
+	if rp, ok := cfg.ResolveProviderFull(p); ok {
+		return rp.ReasoningEffort
+	}
+	return ""
+}
+
 func (m model) Init() tea.Cmd { return nil }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -136,6 +150,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		if m.picking {
 			return m.updatePicking(msg)
+		}
+		if m.reasoningPicking {
+			return m.updateReasoningPicking(msg)
 		}
 		switch msg.String() {
 		case "q", "ctrl+c", "esc":
@@ -173,6 +190,21 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.pickCursor = 0
 			m.message = ""
 			return m, m.fetchModelsCmd()
+		case "t":
+			e := m.entries[m.cursor]
+			if !providerSupportsReasoningEffort(m.cfg, e.name) {
+				break
+			}
+			m.reasoningPicking = true
+			m.reasoningChoices = config.ReasoningEffortChoices(e.name)
+			m.reasoningCursor = 0
+			for i, choice := range m.reasoningChoices {
+				if choice == e.reasoningEffort {
+					m.reasoningCursor = i
+					break
+				}
+			}
+			m.message = ""
 		case "r":
 			e := m.entries[m.cursor]
 			if providerUsesNativeConfig(m.cfg, e.name) {
@@ -362,8 +394,44 @@ func (m *model) updatePicking(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m *model) updateReasoningPicking(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc", "ctrl+c":
+		m.reasoningPicking = false
+		m.reasoningChoices = nil
+	case "up", "k":
+		if m.reasoningCursor > 0 {
+			m.reasoningCursor--
+		}
+	case "down", "j":
+		if m.reasoningCursor < len(m.reasoningChoices)-1 {
+			m.reasoningCursor++
+		}
+	case "enter":
+		if len(m.reasoningChoices) == 0 || m.reasoningCursor >= len(m.reasoningChoices) {
+			return m, nil
+		}
+		chosen := m.reasoningChoices[m.reasoningCursor]
+		m.reasoningPicking = false
+		e := m.entries[m.cursor]
+		if err := m.saveReasoningEffort(e.name, chosen); err != nil {
+			m.message = styleDanger.Render(fmt.Sprintf("  ✗ Failed to save config: %v", err))
+		} else {
+			m.entries[m.cursor].reasoningEffort = chosen
+			m.message = styleSuccess.Render(fmt.Sprintf("  ✓ Thinking for %s set to %s", e.label, chosen))
+		}
+		m.reasoningChoices = nil
+	}
+	return m, nil
+}
+
 func (m *model) saveModel(provider, newModel string) error {
 	m.cfg.SetModel(provider, newModel)
+	return config.Save(m.cfg)
+}
+
+func (m *model) saveReasoningEffort(provider, effort string) error {
+	m.cfg.SetReasoningEffort(provider, effort)
 	return config.Save(m.cfg)
 }
 
@@ -375,6 +443,9 @@ func (m model) View() string {
 	// Model picker overlay
 	if m.picking {
 		return m.viewModelPicker()
+	}
+	if m.reasoningPicking {
+		return m.viewReasoningPicker()
 	}
 
 	var b strings.Builder
@@ -438,6 +509,17 @@ func (m model) View() string {
 				b.WriteString("\n")
 			}
 		}
+		if e.name != "auto" && providerSupportsReasoningEffort(m.cfg, e.name) {
+			effort := e.reasoningEffort
+			def := config.DefaultReasoningEffort(e.name)
+			line := "    thinking: " + effort
+			if effort != "" && effort != def {
+				b.WriteString(styleWarning.Render(line))
+			} else {
+				b.WriteString(styleHelp.Render(line))
+			}
+			b.WriteString("\n")
+		}
 
 		// Separator after "auto"
 		if e.name == "auto" {
@@ -459,8 +541,11 @@ func (m model) View() string {
 	b.WriteString("\n")
 	help := helpEntry("↑/↓", "navigate") + styleHelp.Render("  ·  ") +
 		helpEntry("enter", "select") + styleHelp.Render("  ·  ") +
-		helpEntry("m", "model") + styleHelp.Render("  ·  ") +
-		helpEntry("q", "quit")
+		helpEntry("m", "model")
+	if providerSupportsReasoningEffort(m.cfg, m.entries[m.cursor].name) {
+		help += styleHelp.Render("  ·  ") + helpEntry("t", "thinking")
+	}
+	help += styleHelp.Render("  ·  ") + helpEntry("q", "quit")
 	b.WriteString("  " + help)
 	b.WriteString("\n")
 
@@ -475,6 +560,14 @@ func providerNeedsAuth(cfg config.Config, provider string) bool {
 func providerUsesNativeConfig(cfg config.Config, provider string) bool {
 	rp, ok := cfg.ResolveProviderFull(provider)
 	return ok && rp.Protocol == config.ProtocolACP
+}
+
+func providerSupportsReasoningEffort(cfg config.Config, provider string) bool {
+	if provider == "auto" {
+		return false
+	}
+	rp, ok := cfg.ResolveProviderFull(provider)
+	return ok && config.SupportsReasoningEffort(rp.Name)
 }
 
 func (m model) viewModelPicker() string {
@@ -573,6 +666,42 @@ func (m model) viewModelPicker() string {
 			b.WriteString(styleSelected.Render("  › " + label))
 		} else {
 			b.WriteString(styleBullet.Render("  · ") + styleNormal.Render(label))
+		}
+		b.WriteString("\n")
+	}
+
+	b.WriteString("\n")
+	help := helpEntry("↑/↓", "navigate") + styleHelp.Render("  ·  ") +
+		helpEntry("enter", "select") + styleHelp.Render("  ·  ") +
+		helpEntry("esc", "back")
+	b.WriteString("  " + help)
+	b.WriteString("\n")
+
+	return b.String()
+}
+
+func (m model) viewReasoningPicker() string {
+	var b strings.Builder
+
+	e := m.entries[m.cursor]
+	current := e.reasoningEffort
+	def := config.DefaultReasoningEffort(e.name)
+
+	b.WriteString("\n")
+	b.WriteString(styleTitle.Render(fmt.Sprintf("  Select thinking level for %s", e.label)))
+	b.WriteString("\n\n")
+
+	for i, choice := range m.reasoningChoices {
+		if i == m.reasoningCursor {
+			b.WriteString(styleSelected.Render("  › " + choice))
+		} else {
+			b.WriteString(styleBullet.Render("  · ") + styleNormal.Render(choice))
+		}
+
+		if choice == current {
+			b.WriteString(styleLabel.Render("  ← current"))
+		} else if choice == def {
+			b.WriteString(styleHelp.Render("  (default)"))
 		}
 		b.WriteString("\n")
 	}

@@ -13,12 +13,13 @@ import (
 )
 
 type ProviderConfig struct {
-	Model    string   `toml:"model,omitempty"`
-	URL      string   `toml:"url,omitempty"`
-	Env      string   `toml:"env,omitempty"`
-	Protocol Protocol `toml:"protocol,omitempty"`
-	Command  string   `toml:"command,omitempty"`
-	Args     []string `toml:"args,omitempty"`
+	Model           string   `toml:"model,omitempty"`
+	ReasoningEffort string   `toml:"reasoning_effort,omitempty"`
+	URL             string   `toml:"url,omitempty"`
+	Env             string   `toml:"env,omitempty"`
+	Protocol        Protocol `toml:"protocol,omitempty"`
+	Command         string   `toml:"command,omitempty"`
+	Args            []string `toml:"args,omitempty"`
 }
 
 type PricingOverride struct {
@@ -53,6 +54,43 @@ var KnownModels = map[string][]string{
 	"groq":       {"llama-3.3-70b-versatile", "llama-3.1-8b-instant", "openai/gpt-oss-20b"},
 	"openrouter": {"openrouter/auto", "google/gemini-3-flash-preview", "openai/gpt-4o-mini"},
 	"mistral":    {"mistral-small-latest", "mistral-large-latest", "codestral-latest"},
+}
+
+var knownReasoningEfforts = map[string][]string{
+	"codex": {"low", "medium", "high", "xhigh"},
+}
+
+func ReasoningEffortChoices(provider string) []string {
+	choices := knownReasoningEfforts[provider]
+	return append([]string(nil), choices...)
+}
+
+func SupportsReasoningEffort(provider string) bool {
+	return len(knownReasoningEfforts[provider]) > 0
+}
+
+func LowestReasoningEffort(provider string) string {
+	choices := knownReasoningEfforts[provider]
+	if len(choices) == 0 {
+		return ""
+	}
+	return choices[0]
+}
+
+func DefaultReasoningEffort(provider string) string {
+	if entry, ok := Registry[provider]; ok {
+		return entry.DefaultReasoningEffort
+	}
+	return ""
+}
+
+func ValidReasoningEffort(provider, effort string) bool {
+	for _, choice := range knownReasoningEfforts[provider] {
+		if effort == choice {
+			return true
+		}
+	}
+	return false
 }
 
 func (c Config) AutoOrder() []string {
@@ -211,14 +249,15 @@ func (c Config) ResolveProviderFull(name string) (ResolvedProvider, bool) {
 
 	// Start from registry defaults
 	rp := ResolvedProvider{
-		Name:      name,
-		Model:     entry.DefaultModel,
-		URL:       entry.DefaultURL,
-		Env:       entry.DefaultEnv,
-		Command:   entry.DefaultCommand,
-		Args:      append([]string(nil), entry.DefaultArgs...),
-		Protocol:  entry.Protocol,
-		NeedsAuth: entry.NeedsAuth,
+		Name:            name,
+		Model:           entry.DefaultModel,
+		ReasoningEffort: entry.DefaultReasoningEffort,
+		URL:             entry.DefaultURL,
+		Env:             entry.DefaultEnv,
+		Command:         entry.DefaultCommand,
+		Args:            append([]string(nil), entry.DefaultArgs...),
+		Protocol:        entry.Protocol,
+		NeedsAuth:       entry.NeedsAuth,
 	}
 
 	// Layer 2: named struct fields for builtins
@@ -226,6 +265,9 @@ func (c Config) ResolveProviderFull(name string) (ResolvedProvider, bool) {
 	case "anthropic":
 		if c.Anthropic.Model != "" {
 			rp.Model = c.Anthropic.Model
+		}
+		if c.Anthropic.ReasoningEffort != "" {
+			rp.ReasoningEffort = c.Anthropic.ReasoningEffort
 		}
 		if c.Anthropic.URL != "" {
 			rp.URL = c.Anthropic.URL
@@ -237,6 +279,9 @@ func (c Config) ResolveProviderFull(name string) (ResolvedProvider, bool) {
 		if c.OpenAI.Model != "" {
 			rp.Model = c.OpenAI.Model
 		}
+		if c.OpenAI.ReasoningEffort != "" {
+			rp.ReasoningEffort = c.OpenAI.ReasoningEffort
+		}
 		if c.OpenAI.URL != "" {
 			rp.URL = c.OpenAI.URL
 		}
@@ -246,6 +291,9 @@ func (c Config) ResolveProviderFull(name string) (ResolvedProvider, bool) {
 	case "ollama":
 		if c.Ollama.Model != "" {
 			rp.Model = c.Ollama.Model
+		}
+		if c.Ollama.ReasoningEffort != "" {
+			rp.ReasoningEffort = c.Ollama.ReasoningEffort
 		}
 		if c.Ollama.URL != "" {
 			rp.URL = c.Ollama.URL
@@ -259,6 +307,9 @@ func (c Config) ResolveProviderFull(name string) (ResolvedProvider, bool) {
 	if hasCustom {
 		if custom.Model != "" {
 			rp.Model = custom.Model
+		}
+		if custom.ReasoningEffort != "" {
+			rp.ReasoningEffort = custom.ReasoningEffort
 		}
 		if custom.URL != "" {
 			rp.URL = custom.URL
@@ -294,6 +345,28 @@ func (c Config) ResolveProviderFull(name string) (ResolvedProvider, bool) {
 	return rp, true
 }
 
+func applyRegistryDefaults(provider string, pc *ProviderConfig) {
+	entry, ok := Registry[provider]
+	if !ok {
+		return
+	}
+	if pc.URL == "" {
+		pc.URL = entry.DefaultURL
+	}
+	if pc.Env == "" {
+		pc.Env = entry.DefaultEnv
+	}
+	if pc.Protocol == "" {
+		pc.Protocol = entry.Protocol
+	}
+	if pc.Command == "" {
+		pc.Command = entry.DefaultCommand
+	}
+	if pc.Args == nil && entry.DefaultArgs != nil {
+		pc.Args = append([]string(nil), entry.DefaultArgs...)
+	}
+}
+
 // SetModel writes a model to the appropriate config location.
 func (c *Config) SetModel(provider, model string) {
 	switch provider {
@@ -309,24 +382,34 @@ func (c *Config) SetModel(provider, model string) {
 		}
 		pc := c.Custom[provider]
 		pc.Model = model
-		// Inherit URL/Env from Registry if not set
-		if entry, ok := Registry[provider]; ok {
-			if pc.URL == "" {
-				pc.URL = entry.DefaultURL
-			}
-			if pc.Env == "" {
-				pc.Env = entry.DefaultEnv
-			}
-			if pc.Protocol == "" {
-				pc.Protocol = entry.Protocol
-			}
-			if pc.Command == "" {
-				pc.Command = entry.DefaultCommand
-			}
-			if pc.Args == nil && entry.DefaultArgs != nil {
-				pc.Args = append([]string(nil), entry.DefaultArgs...)
-			}
+		applyRegistryDefaults(provider, &pc)
+		c.Custom[provider] = pc
+	}
+}
+
+// SetReasoningEffort writes a reasoning effort override. The provider default is stored as empty.
+func (c *Config) SetReasoningEffort(provider, effort string) {
+	if effort == DefaultReasoningEffort(provider) {
+		effort = ""
+	}
+
+	switch provider {
+	case "anthropic":
+		c.Anthropic.ReasoningEffort = effort
+	case "openai":
+		c.OpenAI.ReasoningEffort = effort
+	case "ollama":
+		c.Ollama.ReasoningEffort = effort
+	default:
+		pc, exists := c.Custom[provider]
+		if effort == "" && !exists {
+			return
 		}
+		if c.Custom == nil {
+			c.Custom = make(map[string]ProviderConfig)
+		}
+		pc.ReasoningEffort = effort
+		applyRegistryDefaults(provider, &pc)
 		c.Custom[provider] = pc
 	}
 }
@@ -353,6 +436,9 @@ func (c Config) Validate() []string {
 	}
 
 	for name, pc := range c.Custom {
+		if pc.ReasoningEffort != "" && SupportsReasoningEffort(name) && !ValidReasoningEffort(name, pc.ReasoningEffort) {
+			problems = append(problems, fmt.Sprintf("custom provider %q has invalid reasoning_effort %q", name, pc.ReasoningEffort))
+		}
 		if _, ok := Registry[name]; ok {
 			continue // registry providers don't need url
 		}

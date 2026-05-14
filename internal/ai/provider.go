@@ -34,7 +34,7 @@ func buildProvider(rp config.ResolvedProvider) (Provider, error) {
 		if rp.Command == "" {
 			return nil, fmt.Errorf("%s ACP command is not configured", rp.Name)
 		}
-		return &ACPProvider{Name: rp.Name, Command: rp.Command, Args: rp.Args, Model: rp.Model}, nil
+		return &ACPProvider{Name: rp.Name, Command: rp.Command, Args: rp.Args, Model: rp.Model, ReasoningEffort: rp.ReasoningEffort}, nil
 	}
 
 	if rp.NeedsAuth {
@@ -413,7 +413,7 @@ func resolveACPProvider(rp config.ResolvedProvider) config.ResolvedProvider {
 func ProviderCommandLine(rp config.ResolvedProvider) string {
 	if rp.Protocol == config.ProtocolACP {
 		rp = resolveACPProvider(rp)
-		return acpCommandLine(rp.Command, (&ACPProvider{Name: rp.Name, Args: rp.Args, Model: rp.Model}).commandArgs())
+		return acpCommandLine(rp.Command, (&ACPProvider{Name: rp.Name, Args: rp.Args, Model: rp.Model, ReasoningEffort: rp.ReasoningEffort}).commandArgs())
 	}
 	return strings.TrimSpace(strings.Join(append([]string{rp.Command}, rp.Args...), " "))
 }

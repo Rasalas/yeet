@@ -28,6 +28,9 @@ func TestDefaultConfig(t *testing.T) {
 	if got := strings.Join(cfg.AutoOrder(), ","); got != "codex,ollama,claude,api" {
 		t.Errorf("AutoOrder = %q", got)
 	}
+	if got := DefaultReasoningEffort("codex"); got != "low" {
+		t.Errorf("DefaultReasoningEffort(codex) = %q", got)
+	}
 }
 
 func TestAutoOrder(t *testing.T) {
@@ -143,6 +146,9 @@ func TestResolveProviderFull(t *testing.T) {
 		if rp.Protocol != ProtocolACP {
 			t.Errorf("Protocol = %q", rp.Protocol)
 		}
+		if rp.ReasoningEffort != "low" {
+			t.Errorf("ReasoningEffort = %q, want low", rp.ReasoningEffort)
+		}
 		if rp.Command != "npx" {
 			t.Errorf("Command = %q", rp.Command)
 		}
@@ -188,6 +194,20 @@ func TestResolveProviderFull(t *testing.T) {
 		}
 		if rp.Command != "my-agent" || len(rp.Args) != 1 || rp.Args[0] != "--acp" {
 			t.Errorf("command = %q args = %v", rp.Command, rp.Args)
+		}
+	})
+
+	t.Run("custom codex reasoning overrides default", func(t *testing.T) {
+		cfg := DefaultConfig()
+		cfg.Custom = map[string]ProviderConfig{
+			"codex": {ReasoningEffort: "high"},
+		}
+		rp, ok := cfg.ResolveProviderFull("codex")
+		if !ok {
+			t.Fatal("returned false")
+		}
+		if rp.ReasoningEffort != "high" {
+			t.Errorf("ReasoningEffort = %q, want high", rp.ReasoningEffort)
 		}
 	})
 
@@ -246,6 +266,35 @@ func TestSetModel(t *testing.T) {
 		pc := cfg.Custom["together"]
 		if pc.Model != "llama-70b" {
 			t.Errorf("Custom[together].Model = %q", pc.Model)
+		}
+	})
+}
+
+func TestSetReasoningEffort(t *testing.T) {
+	t.Run("registry provider goes to custom", func(t *testing.T) {
+		cfg := DefaultConfig()
+		cfg.SetReasoningEffort("codex", "high")
+		pc := cfg.Custom["codex"]
+		if pc.ReasoningEffort != "high" {
+			t.Errorf("Custom[codex].ReasoningEffort = %q", pc.ReasoningEffort)
+		}
+		if pc.Protocol != ProtocolACP {
+			t.Errorf("Custom[codex].Protocol = %q", pc.Protocol)
+		}
+	})
+
+	t.Run("default effort does not create custom override", func(t *testing.T) {
+		cfg := DefaultConfig()
+		cfg.SetReasoningEffort("codex", "low")
+		if _, ok := cfg.Custom["codex"]; ok {
+			t.Fatal("expected default reasoning effort to avoid custom override")
+		}
+		rp, ok := cfg.ResolveProviderFull("codex")
+		if !ok {
+			t.Fatal("returned false")
+		}
+		if rp.ReasoningEffort != "low" {
+			t.Errorf("ReasoningEffort = %q, want low", rp.ReasoningEffort)
 		}
 	})
 }

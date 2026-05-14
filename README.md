@@ -168,6 +168,7 @@ The default adapters are launched with `npx`:
 [custom.codex]
 protocol = "acp"
 model = "gpt-5.4-mini"  # optional; omit to use ~/.codex/config.toml
+reasoning_effort = "low"  # optional; Codex defaults to lowest reasoning for yeet
 command = "npx"
 args = ["-y", "@zed-industries/codex-acp@0.13.0"]
 
@@ -180,7 +181,7 @@ args = ["-y", "@agentclientprotocol/claude-agent-acp@0.32.0"]
 
 These adapters use the agent's own auth, billing, and config (for example `~/.codex/config.toml` or `~/.claude/`). yeet does not store API keys for ACP providers. If `codex-acp` or `claude-agent-acp` is installed locally, yeet prefers the local binary over `npx`. To keep commit-message generation narrow, yeet sends the staged git context directly, advertises no client file-system or terminal capabilities, and automatically rejects ACP permission requests.
 
-You can also set ACP models from `yeet config` with `m`. For Codex, yeet passes the selected model to the ACP adapter as `-c model="..."`; leaving it unset uses the model from Codex's native config.
+You can also set ACP models from `yeet config` with `m`. For Codex, `t` opens the thinking/reasoning picker (`low`, `medium`, `high`, `xhigh`). yeet defaults Codex reasoning to `low` and passes it to the ACP adapter as `-c model_reasoning_effort="low"` so commit-message generation stays fast even if `~/.codex/config.toml` uses a higher global default. For Codex, yeet passes the selected model to the ACP adapter as `-c model="..."`; leaving it unset uses the model from Codex's native config.
 
 Use `yeet doctor --ai` for a no-generation provider smoke test. For ACP providers this only checks adapter startup, protocol initialization, and session creation; it does not ask the model to generate text.
 
