@@ -19,6 +19,10 @@ func TerminalWidth() int {
 	return width
 }
 
+func IsInteractive() bool {
+	return goterm.IsTerminal(int(os.Stdout.Fd()))
+}
+
 func safeTerminalWidth(width int) int {
 	if width <= 0 {
 		width = defaultTerminalWidth

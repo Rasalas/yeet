@@ -12,17 +12,34 @@ var spinnerFrames = []rune{'\u280b', '\u2819', '\u2839', '\u2838', '\u283c', '\u
 type Spinner struct {
 	mu        sync.Mutex
 	done      chan struct{}
+	finished  chan struct{}
 	stopped   bool
 	firstText bool // true once the caller has replaced the spinner with content
+	active    bool
 }
 
 // Start begins the spinner animation with the given label.
 func (s *Spinner) Start(label string) {
-	s.done = make(chan struct{})
+	s.Stop()
+
+	if !IsInteractive() {
+		return
+	}
+
+	done := make(chan struct{})
+	finished := make(chan struct{})
+
+	s.mu.Lock()
+	s.done = done
+	s.finished = finished
 	s.stopped = false
 	s.firstText = false
+	s.active = true
+	s.mu.Unlock()
 
 	go func() {
+		defer close(finished)
+
 		i := 0
 		ticker := time.NewTicker(80 * time.Millisecond)
 		defer ticker.Stop()
@@ -35,7 +52,7 @@ func (s *Spinner) Start(label string) {
 
 		for {
 			select {
-			case <-s.done:
+			case <-done:
 				return
 			case <-ticker.C:
 				s.mu.Lock()
@@ -52,10 +69,22 @@ func (s *Spinner) Start(label string) {
 // Stop ends the spinner animation and cleans up the line.
 func (s *Spinner) Stop() {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	if !s.stopped {
-		s.stopped = true
-		close(s.done)
-		fmt.Print("\r\033[K")
+	if s.stopped || !s.active {
+		s.mu.Unlock()
+		return
 	}
+
+	done := s.done
+	finished := s.finished
+	s.stopped = true
+	s.active = false
+	s.done = nil
+	s.finished = nil
+	close(done)
+	s.mu.Unlock()
+
+	if finished != nil {
+		<-finished
+	}
+	fmt.Print("\r\033[K")
 }
