@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"sort"
 	"strings"
 	"time"
@@ -34,95 +33,10 @@ func FetchModels(ctx context.Context, provider string, cfg config.Config) ([]str
 	case config.ProtocolOllama:
 		return fetchOllama(ctx, rp)
 	case config.ProtocolACP:
-		if provider == "codex" {
-			return fetchCodexModels(ctx)
-		}
 		return fetchACPModels(ctx, rp)
 	default:
 		return fetchOpenAICompatible(ctx, rp)
 	}
-}
-
-// fetchCodexModels asks the installed Codex CLI for the models visible to the
-// current account. The app-server catalog is the same source used by Codex's
-// own model picker and preserves its preferred ordering.
-func fetchCodexModels(ctx context.Context) ([]string, error) {
-	command, err := exec.LookPath("codex")
-	if err != nil {
-		return nil, fmt.Errorf("codex CLI is not installed: %w", err)
-	}
-	cwd, err := os.Getwd()
-	if err != nil {
-		return nil, err
-	}
-
-	runCtx, cancel := context.WithTimeout(ctx, modelDiscoveryTimeout)
-	defer cancel()
-	conn, err := startACP(runCtx, command, []string{"app-server"}, cwd)
-	if err != nil {
-		return nil, fmt.Errorf("failed to start Codex app server: %w", err)
-	}
-	defer conn.close()
-
-	if _, err := conn.call(1, "initialize", map[string]any{
-		"clientInfo": map[string]string{
-			"name":    "yeet",
-			"title":   "yeet",
-			"version": "0.0.0",
-		},
-	}, nil); err != nil {
-		return nil, err
-	}
-
-	var models []string
-	var cursor string
-	for id := int64(2); ; id++ {
-		params := map[string]any{"includeHidden": false, "limit": 100}
-		if cursor != "" {
-			params["cursor"] = cursor
-		}
-		result, err := conn.call(id, "model/list", params, nil)
-		if err != nil {
-			return nil, err
-		}
-
-		page, next, err := parseCodexModelList(result)
-		if err != nil {
-			return nil, err
-		}
-		models = appendUnique(models, page...)
-		if next == "" || next == cursor {
-			break
-		}
-		cursor = next
-	}
-	if len(models) == 0 {
-		return nil, fmt.Errorf("Codex returned no available models")
-	}
-	return models, nil
-}
-
-func parseCodexModelList(result json.RawMessage) ([]string, string, error) {
-	var response struct {
-		Data []struct {
-			ID    string `json:"id"`
-			Model string `json:"model"`
-		} `json:"data"`
-		NextCursor string `json:"nextCursor"`
-	}
-	if err := json.Unmarshal(result, &response); err != nil {
-		return nil, "", fmt.Errorf("failed to parse Codex model list: %w", err)
-	}
-
-	models := make([]string, 0, len(response.Data))
-	for _, item := range response.Data {
-		name := item.Model
-		if name == "" {
-			name = item.ID
-		}
-		models = appendUnique(models, name)
-	}
-	return models, response.NextCursor, nil
 }
 
 // fetchACPModels creates a no-prompt session and reads the model choices that
@@ -198,19 +112,19 @@ func parseACPModels(result json.RawMessage) ([]string, error) {
 	}
 
 	var models []string
-	for _, item := range response.Models.Available {
-		models = appendUnique(models, item.ModelID)
-	}
-	models = appendUnique(models, response.Models.Current)
-	if len(models) > 0 {
-		return models, nil
-	}
-
 	for _, option := range response.ConfigOptions {
 		if option.ID == "model" {
 			models = appendUnique(models, acpOptionValues(option.Options)...)
 		}
 	}
+	if len(models) > 0 {
+		return models, nil
+	}
+
+	for _, item := range response.Models.Available {
+		models = appendUnique(models, item.ModelID)
+	}
+	models = appendUnique(models, response.Models.Current)
 	return models, nil
 }
 

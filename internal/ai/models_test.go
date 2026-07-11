@@ -54,29 +54,6 @@ func TestParseACPModelsFromNestedConfigOptions(t *testing.T) {
 	}
 }
 
-func TestParseCodexModelList(t *testing.T) {
-	result := json.RawMessage(`{
-		"data": [
-			{"id": "display-id", "model": "gpt-5.5"},
-			{"id": "gpt-5.4", "model": ""},
-			{"id": "duplicate", "model": "gpt-5.5"}
-		],
-		"nextCursor": "next-page"
-	}`)
-
-	got, cursor, err := parseCodexModelList(result)
-	if err != nil {
-		t.Fatalf("parseCodexModelList: %v", err)
-	}
-	want := []string{"gpt-5.5", "gpt-5.4"}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("models = %v, want %v", got, want)
-	}
-	if cursor != "next-page" {
-		t.Fatalf("cursor = %q, want next-page", cursor)
-	}
-}
-
 func TestFakeACPModelAgent(t *testing.T) {
 	if len(os.Args) == 0 || os.Args[len(os.Args)-1] != "acp-model-fake" {
 		return

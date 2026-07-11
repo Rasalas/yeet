@@ -1,10 +1,72 @@
 package tui
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/rasalas/yeet/internal/config"
 )
+
+func TestProviderViewFitsTerminalHeightAndKeepsCursorVisible(t *testing.T) {
+	m := providerViewTestModel(9, 4, 12)
+	view := m.View()
+
+	if got := lipgloss.Height(view); got > m.height {
+		t.Fatalf("view height = %d, terminal height = %d\n%s", got, m.height, view)
+	}
+	if !strings.Contains(view, "provider-04") {
+		t.Fatal("cursor provider is not visible")
+	}
+	if strings.Contains(view, "provider-00") || strings.Contains(view, "provider-08") {
+		t.Fatal("small viewport should hide entries far from the cursor")
+	}
+	if !strings.Contains(view, "more providers") {
+		t.Fatal("small viewport should show overflow indicators")
+	}
+	for i := 0; i < 9; i++ {
+		label := fmt.Sprintf("provider-%02d", i)
+		if count := strings.Count(view, label); count > 1 {
+			t.Fatalf("%s rendered %d times", label, count)
+		}
+	}
+
+	m.message = "  saved"
+	if got := lipgloss.Height(m.View()); got > m.height {
+		t.Fatalf("view with status height = %d, terminal height = %d", got, m.height)
+	}
+}
+
+func TestProviderViewExpandsAfterTerminalResizeWithoutDuplicates(t *testing.T) {
+	m := providerViewTestModel(9, 4, 40)
+	view := m.View()
+
+	if strings.Contains(view, "more providers") {
+		t.Fatal("large viewport should not show overflow indicators")
+	}
+	for i := 0; i < 9; i++ {
+		label := fmt.Sprintf("provider-%02d", i)
+		if count := strings.Count(view, label); count != 1 {
+			t.Fatalf("%s rendered %d times, want 1", label, count)
+		}
+	}
+}
+
+func providerViewTestModel(count, cursor, height int) model {
+	entries := make([]entry, count)
+	for i := range entries {
+		name := fmt.Sprintf("provider-%02d", i)
+		entries[i] = entry{name: name, label: name}
+	}
+	return model{
+		cfg:     config.Config{Provider: entries[cursor].name},
+		entries: entries,
+		cursor:  cursor,
+		width:   80,
+		height:  height,
+	}
+}
 
 func TestFuzzyMatch(t *testing.T) {
 	tests := []struct {

@@ -88,7 +88,7 @@ func TestProviderCommandLineIncludesCodexModelOverride(t *testing.T) {
 		Name:     "codex",
 		Model:    "gpt-5.4-mini",
 		Command:  "npx",
-		Args:     []string{"-y", "@zed-industries/codex-acp@0.13.0"},
+		Args:     []string{"-y", "@zed-industries/codex-acp@0.16.0"},
 		Protocol: config.ProtocolACP,
 	}
 	got := ProviderCommandLine(rp)
@@ -98,14 +98,37 @@ func TestProviderCommandLineIncludesCodexModelOverride(t *testing.T) {
 	if !strings.Contains(got, `model_reasoning_effort="low"`) {
 		t.Fatalf("ProviderCommandLine() = %q", got)
 	}
-	if !strings.Contains(got, "@zed-industries/codex-acp@0.13.0") {
+	if !strings.Contains(got, "@zed-industries/codex-acp@0.16.0") {
 		t.Fatalf("ProviderCommandLine() = %q", got)
+	}
+}
+
+func TestProviderCommandLineUsesACPConfigForCurrentCodexAdapter(t *testing.T) {
+	rp := config.ResolvedProvider{
+		Name:            "codex",
+		Model:           "gpt-5.6-luna",
+		ReasoningEffort: "low",
+		Command:         "npx",
+		Args:            []string{"-y", "@agentclientprotocol/codex-acp@1.1.2"},
+		Protocol:        config.ProtocolACP,
+	}
+	got := ProviderCommandLine(rp)
+	if strings.Contains(got, `model="`) || strings.Contains(got, "model_reasoning_effort") {
+		t.Fatalf("ProviderCommandLine() = %q, current adapter should use ACP config options", got)
 	}
 }
 
 func TestUsesDefaultACPPackageAllowsPinnedPackage(t *testing.T) {
 	if !usesDefaultACPPackage([]string{"-y", "@agentclientprotocol/claude-agent-acp@0.32.0"}, "claude") {
 		t.Fatal("expected pinned Claude ACP package to count as default package")
+	}
+}
+
+func TestUsesDefaultACPPackageAllowsCurrentAndLegacyCodexPackages(t *testing.T) {
+	for _, pkg := range []string{"@agentclientprotocol/codex-acp@1.1.2", "@zed-industries/codex-acp@0.16.0"} {
+		if !usesDefaultACPPackage([]string{"-y", pkg}, "codex") {
+			t.Fatalf("expected %s to count as a default Codex ACP package", pkg)
+		}
 	}
 }
 

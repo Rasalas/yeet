@@ -37,6 +37,27 @@ func TestACPProviderGenerateCommitMessage(t *testing.T) {
 	}
 }
 
+func TestACPProviderConfiguresAdvertisedSessionOptions(t *testing.T) {
+	provider := &ACPProvider{
+		Name:            "codex",
+		Command:         os.Args[0],
+		Args:            []string{"-test.run=TestFakeACPConfigAgent", "@agentclientprotocol/codex-acp", "--", "acp-config-fake"},
+		Model:           "gpt-5.6-luna",
+		ReasoningEffort: "low",
+	}
+
+	message, usage, err := provider.GenerateCommitMessage(CommitContext{Diff: "+hello\n"})
+	if err != nil {
+		t.Fatalf("GenerateCommitMessage: %v", err)
+	}
+	if message != "fix: configured acp" {
+		t.Fatalf("message = %q", message)
+	}
+	if usage.Model != "codex · gpt-5.6-luna" {
+		t.Fatalf("usage model = %q", usage.Model)
+	}
+}
+
 func TestACPProviderCodexModelArgs(t *testing.T) {
 	provider := &ACPProvider{Name: "codex", Args: []string{"-y", "@zed-industries/codex-acp"}, Model: "gpt-5.4-mini"}
 	got := strings.Join(provider.commandArgs(), " ")
@@ -137,6 +158,80 @@ func TestFakeACPAgent(t *testing.T) {
 							"type": "text",
 							"text": "fix(acp): use fake acp",
 						},
+					},
+				},
+			})
+			writeFakeACP(enc, msg.ID, map[string]string{"stopReason": "end_turn"})
+			os.Exit(0)
+		}
+	}
+	os.Exit(6)
+}
+
+func TestFakeACPConfigAgent(t *testing.T) {
+	if len(os.Args) == 0 || os.Args[len(os.Args)-1] != "acp-config-fake" {
+		return
+	}
+
+	scanner := bufio.NewScanner(os.Stdin)
+	enc := json.NewEncoder(os.Stdout)
+	wantOptions := []struct {
+		id, value string
+	}{
+		{"mode", "read-only"},
+		{"model", "gpt-5.6-luna"},
+		{"reasoning_effort", "low"},
+	}
+	configured := 0
+
+	for scanner.Scan() {
+		var msg acpMessage
+		if err := json.Unmarshal(scanner.Bytes(), &msg); err != nil {
+			os.Exit(2)
+		}
+		switch msg.Method {
+		case "initialize":
+			writeFakeACP(enc, msg.ID, map[string]any{
+				"protocolVersion": acpProtocolVersion,
+				"agentCapabilities": map[string]any{
+					"promptCapabilities": map[string]bool{},
+				},
+				"authMethods": []any{},
+			})
+		case "session/new":
+			writeFakeACP(enc, msg.ID, map[string]any{
+				"sessionId": "configured-session",
+				"configOptions": []map[string]string{
+					{"id": "mode"},
+					{"id": "model"},
+					{"id": "reasoning_effort"},
+				},
+			})
+		case "session/set_config_option":
+			if configured >= len(wantOptions) {
+				os.Exit(3)
+			}
+			var params struct {
+				ConfigID string `json:"configId"`
+				Value    string `json:"value"`
+			}
+			if err := json.Unmarshal(msg.Params, &params); err != nil || params.ConfigID != wantOptions[configured].id || params.Value != wantOptions[configured].value {
+				os.Exit(4)
+			}
+			configured++
+			writeFakeACP(enc, msg.ID, map[string]any{"configOptions": []any{}})
+		case "session/prompt":
+			if configured != len(wantOptions) {
+				os.Exit(5)
+			}
+			_ = enc.Encode(map[string]any{
+				"jsonrpc": "2.0",
+				"method":  "session/update",
+				"params": map[string]any{
+					"sessionId": "configured-session",
+					"update": map[string]any{
+						"sessionUpdate": "agent_message_chunk",
+						"content":       map[string]string{"type": "text", "text": "fix: configured acp"},
 					},
 				},
 			})

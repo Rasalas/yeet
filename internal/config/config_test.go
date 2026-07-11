@@ -155,7 +155,7 @@ func TestResolveProviderFull(t *testing.T) {
 		if len(rp.Args) == 0 {
 			t.Error("Args should contain the codex ACP package")
 		}
-		if !strings.Contains(strings.Join(rp.Args, " "), "@zed-industries/codex-acp@") {
+		if !strings.Contains(strings.Join(rp.Args, " "), "@agentclientprotocol/codex-acp@") {
 			t.Errorf("Args should pin the codex ACP package, got %v", rp.Args)
 		}
 	})

@@ -50,7 +50,7 @@ var Registry = map[string]ProviderEntry{
 		DefaultModel:           "",
 		DefaultReasoningEffort: "low",
 		DefaultCommand:         "npx",
-		DefaultArgs:            []string{"-y", "@zed-industries/codex-acp@0.13.0"},
+		DefaultArgs:            []string{"-y", "@agentclientprotocol/codex-acp@1.1.2"},
 		Protocol:               ProtocolACP,
 		NeedsAuth:              false,
 	},

@@ -430,18 +430,20 @@ func localACPBinary(provider string) (string, bool) {
 }
 
 func usesDefaultACPPackage(args []string, provider string) bool {
-	want := ""
+	var wants []string
 	switch provider {
 	case "codex":
-		want = "@zed-industries/codex-acp"
+		wants = []string{"@agentclientprotocol/codex-acp", "@zed-industries/codex-acp"}
 	case "claude":
-		want = "@agentclientprotocol/claude-agent-acp"
+		wants = []string{"@agentclientprotocol/claude-agent-acp"}
 	default:
 		return false
 	}
 	for _, arg := range args {
-		if strings.HasPrefix(arg, want) {
-			return true
+		for _, want := range wants {
+			if strings.HasPrefix(arg, want) {
+				return true
+			}
 		}
 	}
 	return false

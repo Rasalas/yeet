@@ -57,6 +57,13 @@ type acpError struct {
 	Data    json.RawMessage `json:"data,omitempty"`
 }
 
+type acpSession struct {
+	SessionID     string `json:"sessionId"`
+	ConfigOptions []struct {
+		ID string `json:"id"`
+	} `json:"configOptions"`
+}
+
 type limitedBuffer struct {
 	mu    sync.Mutex
 	buf   bytes.Buffer
@@ -134,18 +141,20 @@ func (p *ACPProvider) GenerateCommitMessageStream(ctx CommitContext, onToken fun
 		return "", Usage{}, err
 	}
 
-	var session struct {
-		SessionID string `json:"sessionId"`
-	}
+	var session acpSession
 	if err := json.Unmarshal(result, &session); err != nil {
 		return "", Usage{}, fmt.Errorf("failed to parse ACP session response: %w", err)
 	}
 	if session.SessionID == "" {
 		return "", Usage{}, fmt.Errorf("ACP agent did not return a session id")
 	}
+	nextID, err := p.configureSession(conn, session, 3)
+	if err != nil {
+		return "", Usage{}, err
+	}
 
 	var full strings.Builder
-	_, err = conn.call(3, "session/prompt", map[string]any{
+	_, err = conn.call(nextID, "session/prompt", map[string]any{
 		"sessionId": session.SessionID,
 		"prompt": []map[string]string{
 			{
@@ -246,12 +255,75 @@ func CheckACPProvider(rp config.ResolvedProvider) error {
 		return err
 	}
 
-	_, err = conn.call(2, "session/new", map[string]any{
+	result, err := conn.call(2, "session/new", map[string]any{
 		"cwd":        cwd,
 		"mcpServers": []any{},
 		"_meta":      acpSessionMeta("Smoke test only. Do not generate text.", rp.Model),
 	}, nil)
+	if err != nil {
+		return err
+	}
+	var session acpSession
+	if err := json.Unmarshal(result, &session); err != nil {
+		return fmt.Errorf("failed to parse ACP session response: %w", err)
+	}
+	if session.SessionID == "" {
+		return fmt.Errorf("ACP agent did not return a session id")
+	}
+	_, err = provider.configureSession(conn, session, 3)
 	return err
+}
+
+func (p *ACPProvider) configureSession(conn *acpConn, session acpSession, nextID int64) (int64, error) {
+	optionIDs := make(map[string]bool, len(session.ConfigOptions))
+	for _, option := range session.ConfigOptions {
+		optionIDs[option.ID] = true
+	}
+
+	if p.Name == "codex" && optionIDs["mode"] {
+		if _, err := conn.call(nextID, "session/set_config_option", map[string]any{
+			"sessionId": session.SessionID,
+			"configId":  "mode",
+			"value":     "read-only",
+		}, nil); err != nil {
+			return nextID, err
+		}
+		nextID++
+	}
+
+	if p.Model != "" && optionIDs["model"] {
+		if _, err := conn.call(nextID, "session/set_config_option", map[string]any{
+			"sessionId": session.SessionID,
+			"configId":  "model",
+			"value":     p.Model,
+		}, nil); err != nil {
+			return nextID, err
+		}
+		nextID++
+	}
+
+	effort := p.ReasoningEffort
+	if effort == "" {
+		effort = config.LowestReasoningEffort(p.Name)
+	}
+	effortConfigID := ""
+	for _, candidate := range []string{"reasoning_effort", "effort"} {
+		if optionIDs[candidate] {
+			effortConfigID = candidate
+			break
+		}
+	}
+	if effort != "" && effortConfigID != "" {
+		if _, err := conn.call(nextID, "session/set_config_option", map[string]any{
+			"sessionId": session.SessionID,
+			"configId":  effortConfigID,
+			"value":     effort,
+		}, nil); err != nil {
+			return nextID, err
+		}
+		nextID++
+	}
+	return nextID, nil
 }
 
 func acpSessionMeta(systemPrompt, model string) map[string]any {
@@ -516,6 +588,9 @@ func (p *ACPProvider) commandArgs() []string {
 	if p.Name != "codex" {
 		return args
 	}
+	if p.Command == "codex-acp" || hasACPPackage(args, "@agentclientprotocol/codex-acp") {
+		return args
+	}
 	if p.Model != "" && !hasCodexModelOverride(args) {
 		args = append(args, "-c", fmt.Sprintf("model=%q", p.Model))
 	}
@@ -527,6 +602,15 @@ func (p *ACPProvider) commandArgs() []string {
 		args = append(args, "-c", fmt.Sprintf("model_reasoning_effort=%q", effort))
 	}
 	return args
+}
+
+func hasACPPackage(args []string, want string) bool {
+	for _, arg := range args {
+		if strings.HasPrefix(arg, want) {
+			return true
+		}
+	}
+	return false
 }
 
 func acpCommandLine(command string, args []string) string {

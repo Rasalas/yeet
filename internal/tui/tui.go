@@ -455,83 +455,30 @@ func (m model) View() string {
 	b.WriteString("\n\n")
 
 	active := m.cfg.Provider
-
+	entryViews := make([]string, len(m.entries))
 	for i, e := range m.entries {
-		isActive := e.name == active
+		entryViews[i] = m.viewProviderEntry(i, e, active)
+	}
+	viewportLines := m.height - 6 // title/padding + help + trailing newline
+	if m.message != "" {
+		viewportLines -= 2 // status message + its padding
+	}
+	start, end := providerViewportRange(entryViews, m.cursor, viewportLines)
 
-		// Radio button: ◉ active, ○ inactive
-		radio := "○"
-		if isActive {
-			radio = "◉"
-		}
-
-		// Line 1: radio + label + key status
-		if i == m.cursor {
-			b.WriteString(styleSelected.Render("  " + radio + " " + e.label))
-		} else {
-			radioStyle := styleBullet
-			if isActive {
-				radioStyle = styleSuccess
-			}
-			b.WriteString(radioStyle.Render("  "+radio+" ") + styleNormal.Render(e.label))
-		}
-
-		// Key status (simplified: just ✓ or ✗)
-		if e.name != "auto" {
-			if providerNeedsAuth(m.cfg, e.name) {
-				if e.key.Found {
-					b.WriteString("  " + styleSuccess.Render("✓"))
-				} else {
-					b.WriteString("  " + styleDanger.Render("✗"))
-				}
-			}
-		}
-
+	if start > 0 {
+		b.WriteString(styleHelp.Render(fmt.Sprintf("    ↑ %d more providers", start)))
 		b.WriteString("\n")
-
-		// Line 2: model (indented, secondary)
-		if e.name == "auto" {
-			if e.model != "" {
-				b.WriteString(styleHelp.Render("    → " + e.model))
-				b.WriteString("\n")
-			}
-		} else if providerUsesNativeConfig(m.cfg, e.name) && e.model == "" {
-			b.WriteString(styleHelp.Render("    native CLI config"))
-			b.WriteString("\n")
-		} else if e.model != "" {
-			def := config.DefaultModel(e.name)
-			if def != "" && e.model != def {
-				b.WriteString("    " + styleWarning.Render(e.model))
-				b.WriteString(styleHelp.Render("  (r reset)"))
-				b.WriteString("\n")
-			} else {
-				b.WriteString(styleHelp.Render("    " + e.model))
-				b.WriteString("\n")
-			}
-		}
-		if e.name != "auto" && providerSupportsReasoningEffort(m.cfg, e.name) {
-			effort := e.reasoningEffort
-			def := config.DefaultReasoningEffort(e.name)
-			line := "    thinking: " + effort
-			if effort != "" && effort != def {
-				b.WriteString(styleWarning.Render(line))
-			} else {
-				b.WriteString(styleHelp.Render(line))
-			}
+	}
+	for i := start; i < end; i++ {
+		b.WriteString(entryViews[i])
+		b.WriteString("\n")
+		if i < end-1 {
 			b.WriteString("\n")
 		}
-
-		// Separator after "auto"
-		if e.name == "auto" {
-			sep := strings.Repeat("─", max(m.width-4, 40))
-			b.WriteString(styleHelp.Render("  " + sep))
-			b.WriteString("\n")
-		}
-
-		// Blank line between entries
-		if i < len(m.entries)-1 {
-			b.WriteString("\n")
-		}
+	}
+	if end < len(entryViews) {
+		b.WriteString(styleHelp.Render(fmt.Sprintf("    ↓ %d more providers", len(entryViews)-end)))
+		b.WriteString("\n")
 	}
 
 	if m.message != "" {
@@ -550,6 +497,127 @@ func (m model) View() string {
 	b.WriteString("\n")
 
 	return b.String()
+}
+
+func (m model) viewProviderEntry(i int, e entry, active string) string {
+	var b strings.Builder
+	isActive := e.name == active
+
+	// Radio button: ◉ active, ○ inactive
+	radio := "○"
+	if isActive {
+		radio = "◉"
+	}
+
+	// Line 1: radio + label + key status
+	if i == m.cursor {
+		b.WriteString(styleSelected.Render("  " + radio + " " + e.label))
+	} else {
+		radioStyle := styleBullet
+		if isActive {
+			radioStyle = styleSuccess
+		}
+		b.WriteString(radioStyle.Render("  "+radio+" ") + styleNormal.Render(e.label))
+	}
+
+	// Key status (simplified: just ✓ or ✗)
+	if e.name != "auto" {
+		if providerNeedsAuth(m.cfg, e.name) {
+			if e.key.Found {
+				b.WriteString("  " + styleSuccess.Render("✓"))
+			} else {
+				b.WriteString("  " + styleDanger.Render("✗"))
+			}
+		}
+	}
+
+	b.WriteString("\n")
+
+	// Line 2: model (indented, secondary)
+	if e.name == "auto" {
+		if e.model != "" {
+			b.WriteString(styleHelp.Render("    → " + e.model))
+			b.WriteString("\n")
+		}
+	} else if providerUsesNativeConfig(m.cfg, e.name) && e.model == "" {
+		b.WriteString(styleHelp.Render("    native CLI config"))
+		b.WriteString("\n")
+	} else if e.model != "" {
+		def := config.DefaultModel(e.name)
+		if def != "" && e.model != def {
+			b.WriteString("    " + styleWarning.Render(e.model))
+			b.WriteString(styleHelp.Render("  (r reset)"))
+			b.WriteString("\n")
+		} else {
+			b.WriteString(styleHelp.Render("    " + e.model))
+			b.WriteString("\n")
+		}
+	}
+	if e.name != "auto" && providerSupportsReasoningEffort(m.cfg, e.name) {
+		effort := e.reasoningEffort
+		def := config.DefaultReasoningEffort(e.name)
+		line := "    thinking: " + effort
+		if effort != "" && effort != def {
+			b.WriteString(styleWarning.Render(line))
+		} else {
+			b.WriteString(styleHelp.Render(line))
+		}
+		b.WriteString("\n")
+	}
+
+	// Separator after "auto"
+	if e.name == "auto" {
+		sep := strings.Repeat("─", max(m.width-4, 40))
+		b.WriteString(styleHelp.Render("  " + sep))
+		b.WriteString("\n")
+	}
+
+	return strings.TrimSuffix(b.String(), "\n")
+}
+
+func providerViewportRange(views []string, cursor, maxLines int) (int, int) {
+	if len(views) == 0 {
+		return 0, 0
+	}
+	if maxLines <= 0 || providerWindowHeight(views, 0, len(views)) <= maxLines {
+		return 0, len(views)
+	}
+	cursor = min(max(cursor, 0), len(views)-1)
+	start, end := cursor, cursor+1
+	aboveLines, belowLines := 0, 0
+
+	for {
+		addAbove := start > 0 && providerWindowHeight(views, start-1, end) <= maxLines
+		addBelow := end < len(views) && providerWindowHeight(views, start, end+1) <= maxLines
+		if !addAbove && !addBelow {
+			break
+		}
+		if addAbove && (!addBelow || aboveLines <= belowLines) {
+			start--
+			aboveLines += lipgloss.Height(views[start]) + 1
+		} else {
+			belowLines += lipgloss.Height(views[end]) + 1
+			end++
+		}
+	}
+	return start, end
+}
+
+func providerWindowHeight(views []string, start, end int) int {
+	height := 0
+	for i := start; i < end; i++ {
+		height += lipgloss.Height(views[i])
+	}
+	if end-start > 1 {
+		height += end - start - 1 // blank lines between entries
+	}
+	if start > 0 {
+		height++ // hidden-above indicator
+	}
+	if end < len(views) {
+		height++ // hidden-below indicator
+	}
+	return height
 }
 
 func providerNeedsAuth(cfg config.Config, provider string) bool {
