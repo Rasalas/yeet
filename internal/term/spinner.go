@@ -2,6 +2,7 @@ package term
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 )
@@ -46,7 +47,7 @@ func (s *Spinner) Start(label string) {
 
 		s.mu.Lock()
 		if !s.firstText {
-			fmt.Printf("\r  %s%c %s%s", Dim, spinnerFrames[0], label, Reset)
+			printSpinnerFrame(spinnerFrames[0], label)
 		}
 		s.mu.Unlock()
 
@@ -58,7 +59,7 @@ func (s *Spinner) Start(label string) {
 				s.mu.Lock()
 				if !s.firstText {
 					i = (i + 1) % len(spinnerFrames)
-					fmt.Printf("\r  %s%c %s%s", Dim, spinnerFrames[i], label, Reset)
+					printSpinnerFrame(spinnerFrames[i], label)
 				}
 				s.mu.Unlock()
 			}
@@ -87,4 +88,51 @@ func (s *Spinner) Stop() {
 		<-finished
 	}
 	fmt.Print("\r\033[K")
+}
+
+func printSpinnerFrame(frame rune, label string) {
+	fmt.Printf("\r\033[K%s%s%s", Dim, spinnerContent(frame, label, TerminalWidth()), Reset)
+}
+
+func spinnerContent(frame rune, label string, width int) string {
+	available := safeTerminalWidth(width)
+	frameText := string(frame)
+	if available == 1 {
+		return frameText
+	}
+	if available == 2 {
+		return " " + frameText
+	}
+
+	prefix := "  " + frameText
+	labelWidth := available - displayWidth(prefix) - 1
+	if labelWidth < 1 {
+		return prefix
+	}
+	return prefix + " " + truncateSpinnerLabel(label, labelWidth)
+}
+
+func truncateSpinnerLabel(label string, width int) string {
+	if width <= 0 || label == "" {
+		return ""
+	}
+	if displayWidth(label) <= width {
+		return label
+	}
+	if width == 1 {
+		return "…"
+	}
+
+	var truncated strings.Builder
+	used := 0
+	for _, r := range label {
+		runeWidth := runeDisplayWidth(r)
+		if used+runeWidth > width-1 {
+			break
+		}
+		truncated.WriteRune(r)
+		used += runeWidth
+	}
+	truncated.WriteRune('…')
+	return truncated.String()
 }
