@@ -45,11 +45,11 @@ var DefaultAutoOrder = []string{"codex", "ollama", "claude", "api"}
 
 // KnownModels lists available models per provider for the TUI picker.
 var KnownModels = map[string][]string{
-	"anthropic":  {"claude-haiku-4-5-20251001", "claude-sonnet-4-6", "claude-opus-4-6"},
-	"openai":     {"gpt-4o-mini", "gpt-4.1-nano", "gpt-4.1-mini", "gpt-4.1", "gpt-4o", "o4-mini"},
+	"anthropic":  {"claude-fable-5", "claude-opus-4-8", "claude-sonnet-5", "claude-haiku-4-5-20251001"},
+	"openai":     {"gpt-5.5", "gpt-5.5-pro", "gpt-5.4", "gpt-5.4-pro", "gpt-5.4-mini", "gpt-5.4-nano", "gpt-5.3-codex", "gpt-5.2", "gpt-4.1-mini"},
 	"ollama":     {"llama3", "llama3.1", "gemma2", "mistral", "codellama", "qwen2.5-coder"},
 	"codex":      {"gpt-5.5", "gpt-5.4-mini", "gpt-5.4", "gpt-5.3-codex", "gpt-5.3-codex-spark", "gpt-5.2"},
-	"claude":     {"sonnet", "opus", "haiku", "claude-haiku-4-5-20251001", "claude-sonnet-4-6", "claude-opus-4-6"},
+	"claude":     {"default", "fable", "opus", "sonnet", "haiku", "claude-fable-5", "claude-opus-4-8", "claude-sonnet-5", "claude-haiku-4-5-20251001"},
 	"google":     {"gemini-3-flash-preview", "gemini-2.5-flash"},
 	"groq":       {"llama-3.3-70b-versatile", "llama-3.1-8b-instant", "openai/gpt-oss-20b"},
 	"openrouter": {"openrouter/auto", "google/gemini-3-flash-preview", "openai/gpt-4o-mini"},
