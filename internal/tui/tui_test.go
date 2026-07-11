@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/rasalas/yeet/internal/config"
 )
@@ -50,6 +51,42 @@ func TestProviderViewExpandsAfterTerminalResizeWithoutDuplicates(t *testing.T) {
 		if count := strings.Count(view, label); count != 1 {
 			t.Fatalf("%s rendered %d times, want 1", label, count)
 		}
+	}
+}
+
+func TestProviderNavigationClearsScreenOnlyWhenViewportMoves(t *testing.T) {
+	small := providerViewTestModel(9, 4, 12)
+	updated, cmd := small.Update(tea.KeyMsg{Type: tea.KeyDown})
+	if cmd == nil {
+		t.Fatal("viewport shift should clear the screen")
+	}
+	if got := updated.(model).cursor; got != 5 {
+		t.Fatalf("cursor = %d, want 5", got)
+	}
+
+	large := providerViewTestModel(9, 4, 40)
+	_, cmd = large.Update(tea.KeyMsg{Type: tea.KeyDown})
+	if cmd != nil {
+		t.Fatal("navigation inside an unchanged viewport should use incremental rendering")
+	}
+}
+
+func TestProviderResizeClearsScreen(t *testing.T) {
+	initial := providerViewTestModel(9, 4, 0)
+	initial.width = 0
+	_, cmd := initial.Update(tea.WindowSizeMsg{Width: 100, Height: 15})
+	if cmd != nil {
+		t.Fatal("initial size message should rely on the alt-screen repaint")
+	}
+
+	m := providerViewTestModel(9, 4, 20)
+	updated, cmd := m.Update(tea.WindowSizeMsg{Width: 100, Height: 15})
+	if cmd == nil {
+		t.Fatal("terminal resize should clear the screen")
+	}
+	got := updated.(model)
+	if got.width != 100 || got.height != 15 {
+		t.Fatalf("size = %dx%d, want 100x15", got.width, got.height)
 	}
 }
 

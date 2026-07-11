@@ -143,8 +143,12 @@ func (m model) Init() tea.Cmd { return nil }
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
+		resized := m.width > 0 && m.height > 0 && (m.width != msg.Width || m.height != msg.Height)
 		m.width = msg.Width
 		m.height = msg.Height
+		if resized {
+			return m, tea.ClearScreen
+		}
 	case modelsLoadedMsg:
 		return m.handleModelsLoaded(msg)
 	case tea.KeyMsg:
@@ -160,13 +164,23 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case "up", "k":
 			if m.cursor > 0 {
+				oldStart, oldEnd := m.providerViewportBounds()
 				m.cursor--
 				m.message = ""
+				newStart, newEnd := m.providerViewportBounds()
+				if oldStart != newStart || oldEnd != newEnd {
+					return m, tea.ClearScreen
+				}
 			}
 		case "down", "j":
 			if m.cursor < len(m.entries)-1 {
+				oldStart, oldEnd := m.providerViewportBounds()
 				m.cursor++
 				m.message = ""
+				newStart, newEnd := m.providerViewportBounds()
+				if oldStart != newStart || oldEnd != newEnd {
+					return m, tea.ClearScreen
+				}
 			}
 		case "enter":
 			selected := m.entries[m.cursor]
@@ -454,16 +468,7 @@ func (m model) View() string {
 	b.WriteString(styleTitle.Render("  Provider"))
 	b.WriteString("\n\n")
 
-	active := m.cfg.Provider
-	entryViews := make([]string, len(m.entries))
-	for i, e := range m.entries {
-		entryViews[i] = m.viewProviderEntry(i, e, active)
-	}
-	viewportLines := m.height - 6 // title/padding + help + trailing newline
-	if m.message != "" {
-		viewportLines -= 2 // status message + its padding
-	}
-	start, end := providerViewportRange(entryViews, m.cursor, viewportLines)
+	entryViews, start, end := m.providerViewport()
 
 	if start > 0 {
 		b.WriteString(styleHelp.Render(fmt.Sprintf("    ↑ %d more providers", start)))
@@ -497,6 +502,25 @@ func (m model) View() string {
 	b.WriteString("\n")
 
 	return b.String()
+}
+
+func (m model) providerViewport() ([]string, int, int) {
+	active := m.cfg.Provider
+	entryViews := make([]string, len(m.entries))
+	for i, e := range m.entries {
+		entryViews[i] = m.viewProviderEntry(i, e, active)
+	}
+	viewportLines := m.height - 6 // title/padding + help + trailing newline
+	if m.message != "" {
+		viewportLines -= 2 // status message + its padding
+	}
+	start, end := providerViewportRange(entryViews, m.cursor, viewportLines)
+	return entryViews, start, end
+}
+
+func (m model) providerViewportBounds() (int, int) {
+	_, start, end := m.providerViewport()
+	return start, end
 }
 
 func (m model) viewProviderEntry(i int, e entry, active string) string {
