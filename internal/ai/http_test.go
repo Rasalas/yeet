@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -62,7 +63,68 @@ func TestDoRequest(t *testing.T) {
 		var result map[string]any
 		err := doRequest(context.Background(), "POST", server.URL, nil, nil, &result)
 		if err == nil {
-			t.Error("expected error for invalid JSON response")
+			t.Fatal("expected error for invalid JSON response")
+		}
+		want := "API error (HTTP 500): not json"
+		if err.Error() != want {
+			t.Errorf("err = %q, want %q", err.Error(), want)
+		}
+	})
+
+	t.Run("http status with JSON error body is unwrapped", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			json.NewEncoder(w).Encode(map[string]any{
+				"error": map[string]string{"message": "invalid api key"},
+			})
+		}))
+		defer server.Close()
+
+		var result map[string]any
+		err := doRequest(context.Background(), "POST", server.URL, nil, nil, &result)
+		if err == nil {
+			t.Fatal("expected error for 401 response")
+		}
+		want := "API error (HTTP 401): invalid api key"
+		if err.Error() != want {
+			t.Errorf("err = %q, want %q", err.Error(), want)
+		}
+	})
+
+	t.Run("http status with HTML body yields snippet", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusBadGateway)
+			w.Write([]byte("<html><body>Bad Gateway</body></html>"))
+		}))
+		defer server.Close()
+
+		var result map[string]any
+		err := doRequest(context.Background(), "POST", server.URL, nil, nil, &result)
+		if err == nil {
+			t.Fatal("expected error for 502 response")
+		}
+		want := "API error (HTTP 502): <html><body>Bad Gateway</body></html>"
+		if err.Error() != want {
+			t.Errorf("err = %q, want %q", err.Error(), want)
+		}
+	})
+
+	t.Run("long non-JSON error bodies are truncated", func(t *testing.T) {
+		long := strings.Repeat("x", 5000)
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			w.Write([]byte(long))
+		}))
+		defer server.Close()
+
+		var result map[string]any
+		err := doRequest(context.Background(), "POST", server.URL, nil, nil, &result)
+		if err == nil {
+			t.Fatal("expected error for 503 response")
+		}
+		if len(err.Error()) > 300 || !strings.Contains(err.Error(), "HTTP 503") {
+			t.Errorf("err = %q, want short snippet mentioning HTTP 503", err.Error())
 		}
 	})
 
