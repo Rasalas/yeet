@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -8,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
+	"github.com/rasalas/yeet/internal/fsutil"
 	"github.com/rasalas/yeet/internal/keyring"
 	"github.com/rasalas/yeet/internal/xdg"
 )
@@ -187,12 +189,12 @@ func Save(cfg Config) error {
 		}
 	}
 
-	f, err := os.Create(path)
-	if err != nil {
+	var buf bytes.Buffer
+	if err := toml.NewEncoder(&buf).Encode(out); err != nil {
 		return err
 	}
-	defer f.Close()
-	return toml.NewEncoder(f).Encode(out)
+
+	return fsutil.WriteFileAtomic(path, buf.Bytes(), 0600)
 }
 
 // Providers returns the builtin provider names.
