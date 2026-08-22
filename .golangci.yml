@@ -1,0 +1,15 @@
+version: "2"
+
+linters:
+  # errcheck, govet, ineffassign, staticcheck
+  default: standard
+  exclusions:
+    rules:
+      # Tests routinely ignore write/encode errors on purpose.
+      - path: _test\.go
+        linters:
+          - errcheck
+      # Deferred cleanup calls: the error cannot be acted upon meaningfully.
+      - linters:
+          - errcheck
+        source: '^\s*defer\s'

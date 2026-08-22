@@ -106,7 +106,7 @@ func runYeet(cmd *cobra.Command, args []string) error {
 		if streamed {
 			term.ClearRenderedBlock(streamedPreviewRenderedLines(message, terminalWidth()))
 		}
-		linesToClear := 3
+		var linesToClear int
 		for {
 			width := terminalWidth()
 			linesToClear = renderCommitConfirmation(message, width)
@@ -177,9 +177,8 @@ func runYeet(cmd *cobra.Command, args []string) error {
 	if localFlag {
 		fmt.Printf("  %s✓%s %slocal commit only%s (skipped push)\n", term.Green, term.Reset, term.Dim, term.Reset)
 	} else {
-		pushOut, err := git.Push()
-		if err != nil {
-			pushOut, err = git.PushSetUpstream()
+		if _, err := git.Push(); err != nil {
+			pushOut, err := git.PushSetUpstream()
 			if err != nil {
 				return fmt.Errorf("push failed: %s", pushOut)
 			}

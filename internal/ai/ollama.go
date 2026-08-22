@@ -59,7 +59,7 @@ func (p *OllamaProvider) GenerateCommitMessage(ctx CommitContext) (string, Usage
 	}
 
 	if result.Error != "" {
-		return "", Usage{}, fmt.Errorf("Ollama error: %s", result.Error)
+		return "", Usage{}, fmt.Errorf("ollama error: %s", result.Error)
 	}
 
 	usage := Usage{
@@ -107,7 +107,7 @@ func (p *OllamaProvider) GenerateCommitMessageStream(ctx CommitContext, onToken 
 		}
 
 		if chunk.Error != "" {
-			return "", Usage{}, fmt.Errorf("Ollama error: %s", chunk.Error)
+			return "", Usage{}, fmt.Errorf("ollama error: %s", chunk.Error)
 		}
 
 		if chunk.Message.Content != "" {

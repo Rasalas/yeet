@@ -1,8 +1,21 @@
 package evaldb
 
-import "testing"
+import (
+	"os/exec"
+	"testing"
+)
+
+// requireSQLite skips on hosts without the sqlite3 CLI, which the store
+// shells out to (e.g. GitHub's Windows runners).
+func requireSQLite(t *testing.T) {
+	t.Helper()
+	if _, err := exec.LookPath("sqlite3"); err != nil {
+		t.Skip("sqlite3 not available on PATH")
+	}
+}
 
 func TestInsertAndSelectEligibleRuns(t *testing.T) {
+	requireSQLite(t)
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 
 	store, err := Open()
@@ -60,6 +73,7 @@ func TestInsertAndSelectEligibleRuns(t *testing.T) {
 }
 
 func TestVariantAndVotingFlow(t *testing.T) {
+	requireSQLite(t)
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 
 	store, err := Open()
