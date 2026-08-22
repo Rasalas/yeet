@@ -126,7 +126,7 @@ func (p *ACPProvider) GenerateCommitMessageStream(ctx CommitContext, onToken fun
 		"clientInfo": map[string]string{
 			"name":    "yeet",
 			"title":   "yeet",
-			"version": "0.0.0",
+			"version": ClientVersion(),
 		},
 	}, nil); err != nil {
 		return "", Usage{}, err
@@ -249,7 +249,7 @@ func CheckACPProvider(rp config.ResolvedProvider) error {
 		"clientInfo": map[string]string{
 			"name":    "yeet",
 			"title":   "yeet",
-			"version": "0.0.0",
+			"version": ClientVersion(),
 		},
 	}, nil); err != nil {
 		return err

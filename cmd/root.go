@@ -39,6 +39,14 @@ func Execute() {
 	}
 }
 
+// SetVersion records the build version for --version and ACP client info.
+func SetVersion(v string) {
+	if v != "" {
+		rootCmd.Version = v
+		ai.SetClientVersion(v)
+	}
+}
+
 // RunAsCommit is called by subcommands when they receive unexpected args,
 // indicating the user meant it as a commit message, not a subcommand.
 func RunAsCommit(subcommandName string, args []string) error {

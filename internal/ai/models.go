@@ -70,7 +70,7 @@ func fetchACPModels(ctx context.Context, rp config.ResolvedProvider) ([]string, 
 		"clientInfo": map[string]string{
 			"name":    "yeet",
 			"title":   "yeet",
-			"version": "0.0.0",
+			"version": ClientVersion(),
 		},
 	}, nil); err != nil {
 		return nil, err
