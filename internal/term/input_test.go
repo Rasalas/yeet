@@ -2,6 +2,9 @@ package term
 
 import (
 	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -109,9 +112,11 @@ func TestDecodeEditEventReassemblesSplitRunes(t *testing.T) {
 func TestGetEditor(t *testing.T) {
 	origVisual := os.Getenv("VISUAL")
 	origEditor := os.Getenv("EDITOR")
+	origGitVar := gitVarEditor
 	defer func() {
 		os.Setenv("VISUAL", origVisual)
 		os.Setenv("EDITOR", origEditor)
+		gitVarEditor = origGitVar
 	}()
 
 	t.Run("VISUAL takes precedence", func(t *testing.T) {
@@ -130,11 +135,62 @@ func TestGetEditor(t *testing.T) {
 		}
 	})
 
-	t.Run("default vi", func(t *testing.T) {
+	t.Run("git core.editor before platform default", func(t *testing.T) {
 		os.Unsetenv("VISUAL")
 		os.Unsetenv("EDITOR")
+		gitVarEditor = func() string { return "kate" }
+		if got := GetEditor(); got != "kate" {
+			t.Errorf("GetEditor() = %q, want \"kate\"", got)
+		}
+	})
+
+	t.Run("platform default vi", func(t *testing.T) {
+		os.Unsetenv("VISUAL")
+		os.Unsetenv("EDITOR")
+		gitVarEditor = func() string { return "" }
+		if runtime.GOOS == "windows" {
+			t.Skip("windows default is notepad")
+		}
 		if got := GetEditor(); got != "vi" {
 			t.Errorf("GetEditor() = %q, want \"vi\"", got)
 		}
 	})
+}
+
+// TestEditExternalUsesUniqueTempFile verifies that the external editor gets
+// a uniquely named temp file instead of the old predictable fixed path.
+func TestEditExternalUsesUniqueTempFile(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a shell script as fake editor")
+	}
+
+	record := filepath.Join(t.TempDir(), "editor-arg.txt")
+	editorPath := filepath.Join(t.TempDir(), "fake-editor.sh")
+	script := "#!/bin/sh\nprintf '%s' \"$1\" > \"" + record + "\"\nprintf 'edited' > \"$1\"\n"
+	if err := os.WriteFile(editorPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("VISUAL", editorPath)
+	t.Setenv("EDITOR", "")
+
+	got, err := EditExternal("original")
+	if err != nil {
+		t.Fatalf("EditExternal() error = %v", err)
+	}
+	if got != "edited" {
+		t.Errorf("EditExternal() = %q, want \"edited\"", got)
+	}
+
+	raw, err := os.ReadFile(record)
+	if err != nil {
+		t.Fatalf("fake editor did not record its argument: %v", err)
+	}
+	name := filepath.Base(strings.TrimSpace(string(raw)))
+	if name == "yeet-commit-msg.txt" {
+		t.Errorf("editor got predictable fixed temp file name %q", name)
+	}
+	if !strings.HasPrefix(name, "yeet-commit-msg-") || !strings.HasSuffix(name, ".txt") {
+		t.Errorf("unexpected temp file name %q", name)
+	}
 }
