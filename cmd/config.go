@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"os/exec"
@@ -33,6 +35,8 @@ var configEditCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("failed to get config path: %w", err)
 		}
+
+		before := fileDigest(path)
 		editor := term.GetEditor()
 		c := exec.Command(editor, path)
 		c.Stdin = os.Stdin
@@ -41,9 +45,23 @@ var configEditCmd = &cobra.Command{
 		if err := c.Run(); err != nil {
 			return fmt.Errorf("editor exited with error: %w", err)
 		}
+		if fileDigest(path) == before {
+			return nil // nothing changed, don't claim a save
+		}
 		fmt.Println("  \u2713 Config saved.")
 		return nil
 	},
+}
+
+// fileDigest returns the hex-encoded sha256 of a file's content, or "" when
+// it cannot be read.
+func fileDigest(path string) string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:])
 }
 
 func init() {

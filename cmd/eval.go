@@ -552,10 +552,3 @@ func readJudgeChoice(reader *bufio.Reader) (string, error) {
 		fmt.Println("  Invalid input. Use a, b, t, x, or q.")
 	}
 }
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
