@@ -3,6 +3,7 @@ package fsutil
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -28,6 +29,9 @@ func TestWriteFileAtomicCreatesAndOverwrites(t *testing.T) {
 }
 
 func TestWriteFileAtomicSetsPermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("unix permission bits are not enforced on windows")
+	}
 	dir := t.TempDir()
 	path := filepath.Join(dir, "file.txt")
 
@@ -63,6 +67,9 @@ func TestWriteFileAtomicLeavesNoTempFiles(t *testing.T) {
 }
 
 func TestWriteFileAtomicKeepsOriginalOnWriteFailure(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("read-only directories are not enforced on windows")
+	}
 	dir := t.TempDir()
 	path := filepath.Join(dir, "file.txt")
 	if err := os.WriteFile(path, []byte("original"), 0o600); err != nil {
