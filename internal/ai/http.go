@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -56,11 +57,38 @@ func doRequest(ctx context.Context, method, url string, body any, headers map[st
 		return fmt.Errorf("failed to read response: %w", err)
 	}
 
+	if resp.StatusCode >= http.StatusBadRequest {
+		return errorFromResponse(resp.StatusCode, respBody)
+	}
+
 	if err := json.Unmarshal(respBody, result); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
 	}
 
 	return nil
+}
+
+// errorFromResponse builds a descriptive API error from an HTTP status and
+// the raw response body. JSON bodies with a known error shape are unwrapped,
+// anything else is included as a short snippet.
+func errorFromResponse(status int, body []byte) error {
+	var structured struct {
+		Error struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if json.Unmarshal(body, &structured) == nil && structured.Error.Message != "" {
+		return fmt.Errorf("API error (HTTP %d): %s", status, structured.Error.Message)
+	}
+
+	snippet := strings.TrimSpace(string(body))
+	if snippet == "" {
+		return fmt.Errorf("API error (HTTP %d)", status)
+	}
+	if len(snippet) > 200 {
+		snippet = snippet[:200] + "…"
+	}
+	return fmt.Errorf("API error (HTTP %d): %s", status, snippet)
 }
 
 // doStream sends a JSON request and returns the open response for streaming.
