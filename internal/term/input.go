@@ -352,7 +352,7 @@ func EditExternal(initial string) (string, error) {
 	defer os.Remove(tmpFile)
 
 	if _, err := f.WriteString(initial); err != nil {
-		f.Close()
+		_ = f.Close()
 		return initial, fmt.Errorf("failed to write temp file: %w", err)
 	}
 	if err := f.Close(); err != nil {
