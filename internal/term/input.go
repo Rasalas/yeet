@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
+	"runtime"
 	"strings"
 	"unicode/utf8"
 
@@ -314,7 +314,18 @@ func EditLine(initial string) (string, error) {
 	}
 }
 
-// GetEditor returns the user's preferred editor.
+// gitVarEditor resolves the editor via `git var GIT_EDITOR`, which honors
+// git's core.editor in addition to VISUAL/EDITOR. Overridden in tests.
+var gitVarEditor = func() string {
+	out, err := exec.Command("git", "var", "GIT_EDITOR").Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// GetEditor returns the user's preferred editor: VISUAL, EDITOR, git's
+// configured editor (core.editor), and finally a platform default.
 func GetEditor() string {
 	if e := os.Getenv("VISUAL"); e != "" {
 		return e
@@ -322,17 +333,31 @@ func GetEditor() string {
 	if e := os.Getenv("EDITOR"); e != "" {
 		return e
 	}
+	if e := gitVarEditor(); e != "" {
+		return e
+	}
+	if runtime.GOOS == "windows" {
+		return "notepad"
+	}
 	return "vi"
 }
 
 // EditExternal opens the message in an external editor.
 func EditExternal(initial string) (string, error) {
-	tmpDir := os.TempDir()
-	tmpFile := filepath.Join(tmpDir, "yeet-commit-msg.txt")
-	if err := os.WriteFile(tmpFile, []byte(initial), 0600); err != nil {
+	f, err := os.CreateTemp("", "yeet-commit-msg-*.txt")
+	if err != nil {
 		return initial, fmt.Errorf("failed to create temp file: %w", err)
 	}
+	tmpFile := f.Name()
 	defer os.Remove(tmpFile)
+
+	if _, err := f.WriteString(initial); err != nil {
+		f.Close()
+		return initial, fmt.Errorf("failed to write temp file: %w", err)
+	}
+	if err := f.Close(); err != nil {
+		return initial, fmt.Errorf("failed to write temp file: %w", err)
+	}
 
 	editor := GetEditor()
 	cmd := exec.Command(editor, tmpFile)
