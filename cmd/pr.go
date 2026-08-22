@@ -37,6 +37,10 @@ func runPR(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to get current branch: %w", err)
 	}
 
+	if git.DetachedHead() {
+		return fmt.Errorf("detached HEAD — switch to a branch first")
+	}
+
 	base, err := git.DefaultBranch()
 	if err != nil {
 		return fmt.Errorf("failed to detect default branch: %w", err)

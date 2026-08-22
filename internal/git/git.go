@@ -1,6 +1,7 @@
 package git
 
 import (
+	"errors"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -9,6 +10,7 @@ import (
 // Git defines the interface for git operations, enabling test doubles.
 type Git interface {
 	HasStagedChanges() bool
+	DetachedHead() bool
 	StageAll() error
 	DiffStat() (string, error)
 	DiffCached() (string, error)
@@ -76,8 +78,32 @@ func (ExecGit) LogOneline() (string, error) {
 }
 
 func (ExecGit) HasStagedChanges() bool {
-	out, err := run("diff", "--cached", "--quiet")
-	return err != nil && out == ""
+	// Exit code 0 = nothing staged, 1 = changes staged. Checking the exit
+	// code instead of output keeps stderr noise (locale warnings, hooks)
+	// from producing a false "nothing staged".
+	cmd := exec.Command("git", "diff", "--cached", "--quiet")
+	err := cmd.Run()
+	return gitExitCode(err) == 1
+}
+
+// DetachedHead reports whether HEAD points at a commit rather than a branch.
+// Non-repository errors report false so callers surface their own messages.
+func (ExecGit) DetachedHead() bool {
+	out, err := run("rev-parse", "--abbrev-ref", "HEAD")
+	return err == nil && strings.TrimSpace(out) == "HEAD"
+}
+
+// gitExitCode extracts the child process exit code, or -1 when the command
+// could not run at all.
+func gitExitCode(err error) int {
+	if err == nil {
+		return 0
+	}
+	var ee *exec.ExitError
+	if errors.As(err, &ee) {
+		return ee.ExitCode()
+	}
+	return -1
 }
 
 func (ExecGit) StatusShort() (string, error) {
@@ -155,3 +181,4 @@ func LogRange(base string) (string, error)      { return Default.LogRange(base) 
 func DiffRange(base string) (string, error)     { return Default.DiffRange(base) }
 func DiffStatRange(base string) (string, error) { return Default.DiffStatRange(base) }
 func HasUpstream() bool                         { return Default.HasUpstream() }
+func DetachedHead() bool                        { return Default.DetachedHead() }

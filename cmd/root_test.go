@@ -22,6 +22,7 @@ type runYeetMockGit struct {
 }
 
 func (m *runYeetMockGit) HasStagedChanges() bool      { return m.hasStagedChanges }
+func (m *runYeetMockGit) DetachedHead() bool          { return false }
 func (m *runYeetMockGit) StageAll() error             { return nil }
 func (m *runYeetMockGit) DiffStat() (string, error)   { return m.diffStat, nil }
 func (m *runYeetMockGit) DiffCached() (string, error) { return "", nil }
