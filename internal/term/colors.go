@@ -5,6 +5,8 @@ import (
 	"os"
 	"regexp"
 	"strings"
+
+	goterm "golang.org/x/term"
 )
 
 // Hex color constants — single source of truth for the entire app.
@@ -36,7 +38,7 @@ var (
 )
 
 func init() {
-	if os.Getenv("NO_COLOR") != "" {
+	if colorDisabled() {
 		Bold = ""
 		Dim = ""
 		Red = ""
@@ -49,6 +51,19 @@ func init() {
 		MsgClose = ""
 		MsgPad = 0
 	}
+}
+
+// colorDisabled reports whether ANSI colors should be suppressed:
+// NO_COLOR set always wins; otherwise colors are off when stdout is not a
+// terminal, unless FORCE_COLOR forces them on (e.g. for `yeet | tee`).
+func colorDisabled() bool {
+	if os.Getenv("NO_COLOR") != "" {
+		return true
+	}
+	if os.Getenv("FORCE_COLOR") != "" {
+		return false
+	}
+	return !goterm.IsTerminal(int(os.Stdout.Fd()))
 }
 
 // Keyhint formats a keybinding: key in bold, description in dim.
