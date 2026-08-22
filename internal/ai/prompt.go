@@ -56,7 +56,9 @@ func LoadPrompt() string {
 
 	data, err := os.ReadFile(path)
 	if err != nil {
-		WritePrompt(DefaultPrompt)
+		// Best effort: generation falls back to the built-in prompt even
+		// when the default file cannot be created.
+		_ = WritePrompt(DefaultPrompt)
 		return DefaultPrompt
 	}
 

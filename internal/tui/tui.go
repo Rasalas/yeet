@@ -790,9 +790,10 @@ func (m model) viewReasoningPicker() string {
 			b.WriteString(styleBullet.Render("  · ") + styleNormal.Render(choice))
 		}
 
-		if choice == current {
+		switch choice {
+		case current:
 			b.WriteString(styleLabel.Render("  ← current"))
-		} else if choice == def {
+		case def:
 			b.WriteString(styleHelp.Render("  (default)"))
 		}
 		b.WriteString("\n")

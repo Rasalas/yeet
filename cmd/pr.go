@@ -123,7 +123,7 @@ func runPR(cmd *cobra.Command, args []string) error {
 	providerLabel := ai.ConfiguredProviderLabel(cfg)
 
 	var title, body string
-	var usage *ai.Usage
+	var usage ai.Usage
 	streamed := false
 	streamedPreviewLines := 0
 
@@ -132,7 +132,7 @@ func runPR(cmd *cobra.Command, args []string) error {
 		if genErr != nil {
 			return fmt.Errorf("AI generation failed: %w", genErr)
 		}
-		usage = &u
+		usage = u
 		title, body = parsePR(msg)
 		streamed = true
 		streamedPreviewLines = previewLines
@@ -146,7 +146,7 @@ func runPR(cmd *cobra.Command, args []string) error {
 		if genErr != nil {
 			return fmt.Errorf("AI generation failed: %w", genErr)
 		}
-		usage = &u
+		usage = u
 		title, body = parsePR(msg)
 	}
 
@@ -160,7 +160,7 @@ func runPR(cmd *cobra.Command, args []string) error {
 		if streamed && streamedPreviewLines > 0 {
 			term.ClearRenderedBlock(streamedPreviewLines)
 		}
-		linesToClear := 3
+		var linesToClear int
 		for {
 			width := term.TerminalWidth()
 			linesToClear = renderPRConfirmation(title, body, width)
@@ -211,10 +211,8 @@ func runPR(cmd *cobra.Command, args []string) error {
 	fmt.Printf("  %s✓%s %s PR created: %s\n", term.Green, term.Reset, f.Name(), url)
 
 	// 9. Usage/cost
-	if usage != nil {
-		if line := usageSummary(*usage); line != "" {
-			fmt.Printf("\n  %s%s%s\n\n", term.Dim, line, term.Reset)
-		}
+	if line := usageSummary(usage); line != "" {
+		fmt.Printf("\n  %s%s%s\n\n", term.Dim, line, term.Reset)
 	}
 
 	return nil
