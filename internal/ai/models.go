@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"sort"
 	"strings"
 	"time"
@@ -47,44 +46,21 @@ func fetchACPModels(ctx context.Context, rp config.ResolvedProvider) ([]string, 
 	if rp.Command == "" {
 		return nil, fmt.Errorf("%s ACP command is not configured", rp.Name)
 	}
-	cwd, err := os.Getwd()
-	if err != nil {
-		return nil, err
-	}
+
+	// Deliberately no model/reasoning overrides: discovery must see the
+	// adapter's vanilla configuration.
+	provider := &ACPProvider{Name: rp.Name, Command: rp.Command, Args: rp.Args}
 
 	runCtx, cancel := context.WithTimeout(ctx, modelDiscoveryTimeout)
 	defer cancel()
-	provider := &ACPProvider{Name: rp.Name, Command: rp.Command, Args: rp.Args}
-	conn, err := startACP(runCtx, provider.Command, provider.commandArgs(), cwd)
+
+	conn, session, err := openACPSession(runCtx, provider, "Model discovery only. Do not generate text.")
 	if err != nil {
-		return nil, fmt.Errorf("failed to start %s ACP agent: %w", rp.Name, err)
+		return nil, err
 	}
 	defer conn.close()
 
-	if _, err := conn.call(1, "initialize", map[string]any{
-		"protocolVersion": acpProtocolVersion,
-		"clientCapabilities": map[string]any{
-			"fs":       map[string]bool{"readTextFile": false, "writeTextFile": false},
-			"terminal": false,
-		},
-		"clientInfo": map[string]string{
-			"name":    "yeet",
-			"title":   "yeet",
-			"version": ClientVersion(),
-		},
-	}, nil); err != nil {
-		return nil, err
-	}
-
-	result, err := conn.call(2, "session/new", map[string]any{
-		"cwd":        cwd,
-		"mcpServers": []any{},
-		"_meta":      acpSessionMeta("Model discovery only. Do not generate text.", ""),
-	}, nil)
-	if err != nil {
-		return nil, err
-	}
-	models, err := parseACPModels(result)
+	models, err := parseACPModels(session)
 	if err != nil {
 		return nil, err
 	}
@@ -94,25 +70,11 @@ func fetchACPModels(ctx context.Context, rp config.ResolvedProvider) ([]string, 
 	return models, nil
 }
 
-func parseACPModels(result json.RawMessage) ([]string, error) {
-	var response struct {
-		Models struct {
-			Available []struct {
-				ModelID string `json:"modelId"`
-			} `json:"availableModels"`
-			Current string `json:"currentModelId"`
-		} `json:"models"`
-		ConfigOptions []struct {
-			ID      string          `json:"id"`
-			Options json.RawMessage `json:"options"`
-		} `json:"configOptions"`
-	}
-	if err := json.Unmarshal(result, &response); err != nil {
-		return nil, fmt.Errorf("failed to parse ACP model list: %w", err)
-	}
-
+// parseACPModels extracts advertised models from a freshly created ACP
+// session: config options named "model" first, then availableModels.
+func parseACPModels(session acpSession) ([]string, error) {
 	var models []string
-	for _, option := range response.ConfigOptions {
+	for _, option := range session.ConfigOptions {
 		if option.ID == "model" {
 			models = appendUnique(models, acpOptionValues(option.Options)...)
 		}
@@ -121,10 +83,10 @@ func parseACPModels(result json.RawMessage) ([]string, error) {
 		return models, nil
 	}
 
-	for _, item := range response.Models.Available {
+	for _, item := range session.Models.Available {
 		models = appendUnique(models, item.ModelID)
 	}
-	models = appendUnique(models, response.Models.Current)
+	models = appendUnique(models, session.Models.Current)
 	return models, nil
 }
 
