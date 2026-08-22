@@ -21,7 +21,6 @@ const (
 	SourceNone     KeySource = ""
 )
 
-
 // Set stores a key in the OS keyring.
 func Set(provider, apiKey string) error {
 	return gokeyring.Set(serviceName, provider, apiKey)

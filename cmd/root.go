@@ -361,23 +361,42 @@ func generateStreaming(sp ai.StreamingProvider, ctx ai.CommitContext, providerLa
 	started := false
 	configureAttemptStatus(sp, &s, &started, "Generating commit message", providerLabel)
 
+	render := func() {
+		if previewLines > 0 {
+			term.ClearRenderedBlock(previewLines)
+		}
+		previewLines = term.RenderStreamingMessage(previewText.String(), terminalWidth())
+	}
+
+	var throttle renderThrottle
 	message, usage, err := sp.GenerateCommitMessageStream(ctx, func(token string) {
 		previewText.WriteString(token)
 		if !started {
 			s.Stop()
 			started = true
+			throttle.due(time.Now())
+			render()
+			return
 		}
-		if previewLines > 0 {
-			term.ClearRenderedBlock(previewLines)
+		// Throttle redraws; the final render below catches the tail.
+		if !throttle.due(time.Now()) {
+			return
 		}
-		previewLines = term.RenderStreamingMessage(previewText.String(), terminalWidth())
+		render()
 	})
 
 	if !started {
 		s.Stop()
 	}
-	if err != nil && previewLines > 0 {
-		term.ClearRenderedBlock(previewLines)
+	switch {
+	case err != nil:
+		if previewLines > 0 {
+			term.ClearRenderedBlock(previewLines)
+		}
+	case started:
+		// Always paint the final state so the displayed block matches the
+		// full message exactly — later clears depend on that line count.
+		render()
 	}
 	return message, usage, err
 }

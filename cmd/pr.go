@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/rasalas/yeet/internal/ai"
 	"github.com/rasalas/yeet/internal/config"
@@ -265,24 +266,43 @@ func generateStreamingPR(sp ai.StreamingProvider, ctx ai.CommitContext, provider
 	started := false
 	configureAttemptStatus(sp, &s, &started, "Generating PR description", providerLabel)
 
-	message, usage, err := sp.GenerateCommitMessageStream(ctx, func(token string) {
-		previewText.WriteString(token)
-		if !started {
-			s.Stop()
-			started = true
-		}
+	render := func() {
 		if previewLines > 0 {
 			term.ClearRenderedBlock(previewLines)
 		}
 		title, body := parsePR(previewText.String())
 		previewLines = displayPRPreview(title, body)
+	}
+
+	var throttle renderThrottle
+	message, usage, err := sp.GenerateCommitMessageStream(ctx, func(token string) {
+		previewText.WriteString(token)
+		if !started {
+			s.Stop()
+			started = true
+			throttle.due(time.Now())
+			render()
+			return
+		}
+		// Throttle redraws; the final render below catches the tail.
+		if !throttle.due(time.Now()) {
+			return
+		}
+		render()
 	})
 
 	if !started {
 		s.Stop()
 	}
-	if err != nil && previewLines > 0 {
-		term.ClearRenderedBlock(previewLines)
+	switch {
+	case err != nil:
+		if previewLines > 0 {
+			term.ClearRenderedBlock(previewLines)
+		}
+	case started:
+		// Always paint the final state so the displayed block matches the
+		// full message exactly — later clears depend on that line count.
+		render()
 	}
 	return message, usage, previewLines, err
 }
