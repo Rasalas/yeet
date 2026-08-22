@@ -163,10 +163,13 @@ func runYeet(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// 6. Commit
+	// 5. Commit
 	out, err := git.Commit(message)
 	if err != nil {
-		return fmt.Errorf("commit failed: %s", out)
+		if detail := strings.TrimSpace(out); detail != "" {
+			return fmt.Errorf("commit failed: %s", detail)
+		}
+		return fmt.Errorf("commit failed: %w", err)
 	}
 	fmt.Printf("  %s✓%s %s\n", term.Green, term.Reset, firstLine(out))
 
@@ -178,7 +181,7 @@ func runYeet(cmd *cobra.Command, args []string) error {
 		_ = saveCommitRunCapture(*capture, usage, message, userAction, localFlag)
 	}
 
-	// 7. Push (unless local-only)
+	// 6. Push (unless local-only)
 	if localFlag {
 		fmt.Printf("  %s✓%s %slocal commit only%s (skipped push)\n", term.Green, term.Reset, term.Dim, term.Reset)
 	} else {

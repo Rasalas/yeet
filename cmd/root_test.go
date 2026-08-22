@@ -14,6 +14,7 @@ type runYeetMockGit struct {
 	hasStagedChanges      bool
 	diffStat              string
 	commitOut             string
+	commitErr             error
 	currentBranch         string
 	commitCalled          bool
 	commitMessage         string
@@ -29,7 +30,7 @@ func (m *runYeetMockGit) DiffCached() (string, error) { return "", nil }
 func (m *runYeetMockGit) Commit(msg string) (string, error) {
 	m.commitCalled = true
 	m.commitMessage = msg
-	return m.commitOut, nil
+	return m.commitOut, m.commitErr
 }
 func (m *runYeetMockGit) Push() (string, error) { m.pushCalled = true; return "", nil }
 func (m *runYeetMockGit) PushSetUpstream() (string, error) {

@@ -21,7 +21,12 @@ var prCmd = &cobra.Command{
 	Short:        "Create a pull request with an AI-generated description",
 	Long:         "Detect the forge (GitHub/GitLab), collect branch commits, generate a PR title and body via AI, and create the PR/MR.",
 	SilenceUsage: true,
-	RunE:         runPR,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if len(args) > 0 {
+			return RunAsCommit("pr", args)
+		}
+		return runPR(cmd, args)
+	},
 }
 
 func runPR(cmd *cobra.Command, args []string) error {
