@@ -114,6 +114,79 @@ func TestParseSSE(t *testing.T) {
 		}
 	})
 
+	t.Run("multi-line data joined with newline", func(t *testing.T) {
+		input := "data: first\ndata: second\n\n"
+		var datas []string
+
+		err := parseSSE(strings.NewReader(input), func(eventType, data string) {
+			datas = append(datas, data)
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if len(datas) != 1 {
+			t.Fatalf("got %d events, want 1", len(datas))
+		}
+		if datas[0] != "first\nsecond" {
+			t.Errorf("data = %q, want %q", datas[0], "first\nsecond")
+		}
+	})
+
+	t.Run("only one leading space is stripped", func(t *testing.T) {
+		input := "data:  padded\n\ndata:no-space\n\n"
+		var datas []string
+
+		err := parseSSE(strings.NewReader(input), func(eventType, data string) {
+			datas = append(datas, data)
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if len(datas) != 2 {
+			t.Fatalf("got %d events, want 2", len(datas))
+		}
+		if datas[0] != " padded" {
+			t.Errorf("padded data = %q, want \" padded\"", datas[0])
+		}
+		if datas[1] != "no-space" {
+			t.Errorf("no-space data = %q, want \"no-space\"", datas[1])
+		}
+	})
+
+	t.Run("comment lines are ignored", func(t *testing.T) {
+		input := ": keepalive\ndata: value\n: ping\n\n"
+		var datas []string
+
+		err := parseSSE(strings.NewReader(input), func(eventType, data string) {
+			datas = append(datas, data)
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if len(datas) != 1 || datas[0] != "value" {
+			t.Errorf("datas = %q, want [value]", datas)
+		}
+	})
+
+	t.Run("large events beyond scanner default", func(t *testing.T) {
+		big := strings.Repeat("x", 200*1024)
+		input := "data: " + big + "\n\n"
+		var size int
+
+		err := parseSSE(strings.NewReader(input), func(eventType, data string) {
+			size = len(data)
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if size != len(big) {
+			t.Errorf("data size = %d, want %d", size, len(big))
+		}
+	})
+
 	t.Run("anthropic style events", func(t *testing.T) {
 		input := `event: message_start
 data: {"message":{"usage":{"input_tokens":100}}}
