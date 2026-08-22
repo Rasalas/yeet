@@ -1,9 +1,24 @@
 package forge
 
 import (
+	"encoding/json"
 	"fmt"
 	"os/exec"
 	"strings"
+)
+
+// lookPath, run and remoteURL are seams so forge behavior is unit-testable
+// without real CLIs or a real repository. run shells out to a command and
+// returns combined output.
+var (
+	lookPath = exec.LookPath
+	run      = func(name string, args ...string) (string, error) {
+		out, err := exec.Command(name, args...).CombinedOutput()
+		return string(out), err
+	}
+	remoteURL = func() (string, error) {
+		return run("git", "remote", "get-url", "origin")
+	}
 )
 
 // Forge abstracts GitHub and GitLab PR/MR operations.
@@ -15,26 +30,36 @@ type Forge interface {
 }
 
 // Detect returns the appropriate Forge for the current repository.
-// It inspects the origin remote URL and checks for the corresponding CLI tool.
+//
+// Remotes that mention "gitlab" always map to GitLab (glab required).
+// Everything else prefers gh; if only glab is installed, GitLab is assumed —
+// self-hosted GitLab hosts often do not carry "gitlab" in their hostname.
 func Detect() (Forge, error) {
-	out, err := exec.Command("git", "remote", "get-url", "origin").CombinedOutput()
+	remote, err := remoteURL()
 	if err != nil {
 		return nil, fmt.Errorf("no git remote 'origin' found")
 	}
 
-	remote := strings.TrimSpace(string(out))
+	_, glabErr := lookPath("glab")
+	_, ghErr := lookPath("gh")
+	glabFound := glabErr == nil
+	ghFound := ghErr == nil
 
 	if strings.Contains(remote, "gitlab") {
-		if _, err := exec.LookPath("glab"); err != nil {
+		if !glabFound {
 			return nil, fmt.Errorf("GitLab remote detected but 'glab' CLI is not installed")
 		}
 		return GitLab{}, nil
 	}
 
-	if _, err := exec.LookPath("gh"); err != nil {
-		return nil, fmt.Errorf("GitHub remote detected but 'gh' CLI is not installed")
+	switch {
+	case ghFound:
+		return GitHub{}, nil
+	case glabFound:
+		return GitLab{}, nil
+	default:
+		return nil, fmt.Errorf("neither 'gh' nor 'glab' CLI is installed")
 	}
-	return GitHub{}, nil
 }
 
 // --- GitHub ---
@@ -46,11 +71,11 @@ func (GitHub) Name() string    { return "GitHub" }
 func (GitHub) CLIName() string { return "gh" }
 
 func (GitHub) ExistingPR(branch string) (string, bool) {
-	out, err := exec.Command("gh", "pr", "view", branch, "--json", "url", "--jq", ".url").CombinedOutput()
+	out, err := run("gh", "pr", "view", branch, "--json", "url", "--jq", ".url")
 	if err != nil {
 		return "", false
 	}
-	url := strings.TrimSpace(string(out))
+	url := strings.TrimSpace(out)
 	if url == "" {
 		return "", false
 	}
@@ -62,11 +87,11 @@ func (GitHub) CreatePR(title, body, base string) (string, error) {
 	if base != "" {
 		args = append(args, "--base", base)
 	}
-	out, err := exec.Command("gh", args...).CombinedOutput()
+	out, err := run("gh", args...)
 	if err != nil {
-		return "", fmt.Errorf("%s", strings.TrimSpace(string(out)))
+		return "", fmt.Errorf("%s", strings.TrimSpace(out))
 	}
-	return strings.TrimSpace(string(out)), nil
+	return strings.TrimSpace(out), nil
 }
 
 // --- GitLab ---
@@ -78,25 +103,32 @@ func (GitLab) Name() string    { return "GitLab" }
 func (GitLab) CLIName() string { return "glab" }
 
 func (GitLab) ExistingPR(branch string) (string, bool) {
-	out, err := exec.Command("glab", "mr", "view", branch, "--output", "json").CombinedOutput()
+	out, err := run("glab", "mr", "view", branch, "--output", "json")
+	if err == nil {
+		var mr struct {
+			WebURL string `json:"web_url"`
+		}
+		if json.Unmarshal([]byte(out), &mr) == nil && mr.WebURL != "" {
+			return mr.WebURL, true
+		}
+		// Structured response without web_url means no MR for this branch.
+		trimmed := strings.TrimSpace(out)
+		if strings.HasPrefix(trimmed, "{") || trimmed == "null" {
+			return "", false
+		}
+	}
+	// Fall back to plain view for old glab versions whose --output flag
+	// fails or prints non-JSON.
+	viewOut, err := run("glab", "mr", "view", branch)
 	if err != nil {
 		return "", false
 	}
-	// glab mr view exits 0 and returns JSON when MR exists
-	text := strings.TrimSpace(string(out))
-	if text == "" || strings.Contains(text, "no open merge request") {
-		return "", false
-	}
-	// Extract web_url from output — glab prints it on a "URL:" line in default mode
-	// Use --output json not available on all versions, fall back to plain view
-	viewOut, err := exec.Command("glab", "mr", "view", branch).CombinedOutput()
-	if err != nil {
-		return "", false
-	}
-	for _, line := range strings.Split(string(viewOut), "\n") {
+	for _, line := range strings.Split(viewOut, "\n") {
 		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "url:") || strings.HasPrefix(line, "URL:") {
-			return strings.TrimSpace(strings.SplitN(line, ":", 2)[1]), true
+		for _, prefix := range []string{"url:", "URL:"} {
+			if strings.HasPrefix(line, prefix) {
+				return strings.TrimSpace(strings.SplitN(line, ":", 2)[1]), true
+			}
 		}
 	}
 	return "", true
@@ -107,16 +139,16 @@ func (GitLab) CreatePR(title, body, base string) (string, error) {
 	if base != "" {
 		args = append(args, "--target-branch", base)
 	}
-	out, err := exec.Command("glab", args...).CombinedOutput()
+	out, err := run("glab", args...)
 	if err != nil {
-		return "", fmt.Errorf("%s", strings.TrimSpace(string(out)))
+		return "", fmt.Errorf("%s", strings.TrimSpace(out))
 	}
 	// Extract URL from glab output
-	for _, line := range strings.Split(string(out), "\n") {
+	for _, line := range strings.Split(out, "\n") {
 		line = strings.TrimSpace(line)
 		if strings.HasPrefix(line, "http") {
 			return line, nil
 		}
 	}
-	return strings.TrimSpace(string(out)), nil
+	return strings.TrimSpace(out), nil
 }
