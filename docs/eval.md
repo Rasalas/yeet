@@ -17,6 +17,12 @@ The workflow is intentionally separate from normal commits:
 - No automatic upload.
 - `sqlite3` must be available on `PATH`.
 
+The database stores **full diffs and prompts in plaintext** — including any
+secrets that were part of a committed change. It lives outside git and is
+never synced, but treat it like the repository history itself: delete it
+(`rm ~/.local/share/yeet/yeet.db`) if you work in sensitive repositories or
+want to reclaim disk.
+
 ## Commands
 
 ### `yeet eval plan`
