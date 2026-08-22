@@ -95,7 +95,18 @@ func runYeet(cmd *cobra.Command, args []string) error {
 	} else if len(args) > 0 {
 		message = strings.Join(args, " ")
 	} else {
+		// Ctrl+C during generation must not leave yeet's auto-staging
+		// behind — undo it before exiting, like Escape would.
+		stopInterrupt := onInterrupt(func() {
+			if autoStaged {
+				if err := git.Reset(); err == nil {
+					fmt.Printf("  %sauto-staged changes unstaged%s\n", term.Dim, term.Reset)
+				}
+			}
+			os.Exit(130)
+		})
 		message, usage, streamed, capture, err = generateOrFallback()
+		stopInterrupt()
 		if err != nil {
 			return err
 		}
