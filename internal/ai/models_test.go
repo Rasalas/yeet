@@ -31,7 +31,7 @@ func TestFetchModelsFromACP(t *testing.T) {
 }
 
 func TestParseACPModelsFromNestedConfigOptions(t *testing.T) {
-	result := json.RawMessage(`{
+	raw := json.RawMessage(`{
 		"configOptions": [{
 			"id": "model",
 			"options": [
@@ -44,7 +44,12 @@ func TestParseACPModelsFromNestedConfigOptions(t *testing.T) {
 		}]
 	}`)
 
-	got, err := parseACPModels(result)
+	var session acpSession
+	if err := json.Unmarshal(raw, &session); err != nil {
+		t.Fatalf("unmarshal session: %v", err)
+	}
+
+	got, err := parseACPModels(session)
 	if err != nil {
 		t.Fatalf("parseACPModels: %v", err)
 	}

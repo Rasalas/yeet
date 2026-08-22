@@ -58,10 +58,17 @@ type acpError struct {
 }
 
 type acpSession struct {
-	SessionID     string `json:"sessionId"`
+	SessionID string `json:"sessionId"`
 	ConfigOptions []struct {
-		ID string `json:"id"`
+		ID      string          `json:"id"`
+		Options json.RawMessage `json:"options"`
 	} `json:"configOptions"`
+	Models struct {
+		Available []struct {
+			ModelID string `json:"modelId"`
+		} `json:"availableModels"`
+		Current string `json:"currentModelId"`
+	} `json:"models"`
 }
 
 type limitedBuffer struct {
@@ -94,25 +101,24 @@ func (p *ACPProvider) GenerateCommitMessage(ctx CommitContext) (string, Usage, e
 	return p.GenerateCommitMessageStream(ctx, func(string) {})
 }
 
-func (p *ACPProvider) GenerateCommitMessageStream(ctx CommitContext, onToken func(string)) (string, Usage, error) {
-	if p.Command == "" {
-		return "", Usage{}, fmt.Errorf("%s ACP command is not configured", p.Name)
-	}
-
+// openACPSession starts an ACP agent and brings it through the initialize
+// handshake and session creation, returning the connection and the new
+// session. The caller owns the connection and must close it.
+func openACPSession(ctx context.Context, provider *ACPProvider, systemPrompt string) (*acpConn, acpSession, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
-		return "", Usage{}, err
+		return nil, acpSession{}, err
 	}
 
-	runCtx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	args := p.commandArgs()
-	conn, err := startACP(runCtx, p.Command, args, cwd)
+	args := provider.commandArgs()
+	conn, err := startACP(ctx, provider.Command, args, cwd)
 	if err != nil {
-		return "", Usage{}, fmt.Errorf("failed to start %s ACP agent (%s): %w", p.Name, acpCommandLine(p.Command, args), err)
+		return nil, acpSession{}, fmt.Errorf("failed to start %s ACP agent (%s): %w", provider.Name, acpCommandLine(provider.Command, args), err)
 	}
-	defer conn.close()
+	closeOnError := func(err error) (*acpConn, acpSession, error) {
+		conn.close()
+		return nil, acpSession{}, err
+	}
 
 	if _, err := conn.call(1, "initialize", map[string]any{
 		"protocolVersion": acpProtocolVersion,
@@ -129,25 +135,42 @@ func (p *ACPProvider) GenerateCommitMessageStream(ctx CommitContext, onToken fun
 			"version": ClientVersion(),
 		},
 	}, nil); err != nil {
-		return "", Usage{}, err
+		return closeOnError(err)
 	}
 
 	result, err := conn.call(2, "session/new", map[string]any{
 		"cwd":        cwd,
 		"mcpServers": []any{},
-		"_meta":      acpSessionMeta(ctx.EffectivePrompt(), p.Model),
+		"_meta":      acpSessionMeta(systemPrompt, provider.Model),
 	}, nil)
 	if err != nil {
-		return "", Usage{}, err
+		return closeOnError(err)
 	}
 
 	var session acpSession
 	if err := json.Unmarshal(result, &session); err != nil {
-		return "", Usage{}, fmt.Errorf("failed to parse ACP session response: %w", err)
+		return closeOnError(fmt.Errorf("failed to parse ACP session response: %w", err))
 	}
 	if session.SessionID == "" {
-		return "", Usage{}, fmt.Errorf("ACP agent did not return a session id")
+		return closeOnError(fmt.Errorf("ACP agent did not return a session id"))
 	}
+	return conn, session, nil
+}
+
+func (p *ACPProvider) GenerateCommitMessageStream(ctx CommitContext, onToken func(string)) (string, Usage, error) {
+	if p.Command == "" {
+		return "", Usage{}, fmt.Errorf("%s ACP command is not configured", p.Name)
+	}
+
+	runCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	conn, session, err := openACPSession(runCtx, p, ctx.EffectivePrompt())
+	if err != nil {
+		return "", Usage{}, err
+	}
+	defer conn.close()
+
 	nextID, err := p.configureSession(conn, session, 3)
 	if err != nil {
 		return "", Usage{}, err
@@ -226,50 +249,17 @@ func CheckACPProvider(rp config.ResolvedProvider) error {
 		return fmt.Errorf("%s ACP command is not configured", rp.Name)
 	}
 
-	cwd, err := os.Getwd()
-	if err != nil {
-		return err
-	}
+	provider := &ACPProvider{Name: rp.Name, Command: rp.Command, Args: rp.Args, Model: rp.Model, ReasoningEffort: rp.ReasoningEffort}
+
 	runCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	provider := &ACPProvider{Name: rp.Name, Command: rp.Command, Args: rp.Args, Model: rp.Model, ReasoningEffort: rp.ReasoningEffort}
-	conn, err := startACP(runCtx, provider.Command, provider.commandArgs(), cwd)
+	conn, session, err := openACPSession(runCtx, provider, "Smoke test only. Do not generate text.")
 	if err != nil {
-		return fmt.Errorf("failed to start %s ACP agent (%s): %w", rp.Name, ProviderCommandLine(rp), err)
+		return err
 	}
 	defer conn.close()
 
-	if _, err := conn.call(1, "initialize", map[string]any{
-		"protocolVersion": acpProtocolVersion,
-		"clientCapabilities": map[string]any{
-			"fs":       map[string]bool{"readTextFile": false, "writeTextFile": false},
-			"terminal": false,
-		},
-		"clientInfo": map[string]string{
-			"name":    "yeet",
-			"title":   "yeet",
-			"version": ClientVersion(),
-		},
-	}, nil); err != nil {
-		return err
-	}
-
-	result, err := conn.call(2, "session/new", map[string]any{
-		"cwd":        cwd,
-		"mcpServers": []any{},
-		"_meta":      acpSessionMeta("Smoke test only. Do not generate text.", rp.Model),
-	}, nil)
-	if err != nil {
-		return err
-	}
-	var session acpSession
-	if err := json.Unmarshal(result, &session); err != nil {
-		return fmt.Errorf("failed to parse ACP session response: %w", err)
-	}
-	if session.SessionID == "" {
-		return fmt.Errorf("ACP agent did not return a session id")
-	}
 	_, err = provider.configureSession(conn, session, 3)
 	return err
 }
