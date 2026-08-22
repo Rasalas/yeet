@@ -47,6 +47,11 @@ func RunAsCommit(subcommandName string, args []string) error {
 }
 
 func runYeet(cmd *cobra.Command, args []string) error {
+	// Fail fast on detached HEAD before touching the index.
+	if git.DetachedHead() {
+		return fmt.Errorf("detached HEAD — switch to a branch first")
+	}
+
 	// 1. Stage: respect existing staged changes, otherwise stage all
 	autoStaged := false
 	if !git.HasStagedChanges() {

@@ -2,6 +2,9 @@ package git
 
 import (
 	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -9,6 +12,7 @@ import (
 // mockGit implements the Git interface for testing.
 type mockGit struct {
 	hasStagedChanges bool
+	detachedHead     bool
 	stageAllErr      error
 	diffStat         string
 	diffStatErr      error
@@ -39,6 +43,7 @@ type mockGit struct {
 }
 
 func (m mockGit) HasStagedChanges() bool                { return m.hasStagedChanges }
+func (m mockGit) DetachedHead() bool                    { return m.detachedHead }
 func (m mockGit) StageAll() error                       { return m.stageAllErr }
 func (m mockGit) DiffStat() (string, error)             { return m.diffStat, m.diffStatErr }
 func (m mockGit) DiffCached() (string, error)           { return m.diffCached, m.diffCachedErr }
@@ -168,5 +173,75 @@ func TestNormalizeOutputTrimsCRLF(t *testing.T) {
 	got := normalizeOutput(in)
 	if got != "value" {
 		t.Fatalf("normalizeOutput() = %q, want %q", got, "value")
+	}
+}
+
+// initTestRepo creates a real git repository and switches the process into
+// it, so ExecGit's shell-outs operate against a controlled state.
+func initTestRepo(t *testing.T) string {
+	t.Helper()
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	dir := t.TempDir()
+	git := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	git("init")
+	git("config", "user.email", "test@example.com")
+	git("config", "user.name", "Test")
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("hello\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git("add", ".")
+	git("commit", "-m", "init")
+	t.Chdir(dir)
+
+	orig := Default
+	t.Cleanup(func() { Default = orig })
+	Default = ExecGit{}
+	return dir
+}
+
+func TestExecGitHasStagedChangesTracksIndex(t *testing.T) {
+	dir := initTestRepo(t)
+
+	if HasStagedChanges() {
+		t.Fatal("fresh commit should have nothing staged")
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("changed\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if HasStagedChanges() {
+		t.Fatal("unstaged modification must not count as staged")
+	}
+
+	if out, err := exec.Command("git", "add", ".").CombinedOutput(); err != nil {
+		t.Fatalf("git add: %v\n%s", err, out)
+	}
+	if !HasStagedChanges() {
+		t.Fatal("staged modification not detected")
+	}
+}
+
+func TestExecGitDetachedHead(t *testing.T) {
+	initTestRepo(t)
+
+	if DetachedHead() {
+		t.Fatal("branch checkout should not be detached")
+	}
+
+	cmd := exec.Command("git", "checkout", "--detach")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git checkout --detach: %v\n%s", err, out)
+	}
+	if !DetachedHead() {
+		t.Fatal("detached HEAD not detected")
 	}
 }
