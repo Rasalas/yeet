@@ -197,18 +197,48 @@ func runAuthImport(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+// Seams for testing keyring flows without touching the OS keyring.
+var (
+	keyringLookup = keyring.Status
+	keyringRemove = keyring.Delete
+	confirmReset  = term.WaitForYesNo
+)
+
 func runAuthReset(cmd *cobra.Command, args []string) error {
 	cfg, _ := config.Load()
 	providers := cfg.AllProviders()
-	deleted := 0
+
+	status := keyringLookup(providers, cfg.CustomEnvs())
+	var stored []string
 	for _, p := range providers {
-		if err := keyring.Delete(p); err == nil {
-			fmt.Printf("  %s\u2713%s %s removed\n", term.Green, term.Reset, p)
-			deleted++
+		if info := status[p]; info.Found && info.Source == keyring.SourceKeyring {
+			stored = append(stored, p)
 		}
 	}
-	if deleted == 0 {
+	if len(stored) == 0 {
 		fmt.Printf("  %sNo keys in keyring.%s\n", term.Dim, term.Reset)
+		return nil
+	}
+
+	if !yesFlag {
+		fmt.Printf("\n  Remove API keys for %d provider(s)? (%s)\n\n",
+			len(stored), strings.Join(stored, ", "))
+		confirm, err := confirmReset()
+		if err != nil {
+			return err
+		}
+		if !confirm {
+			fmt.Printf("  %sCancelled — nothing removed.%s\n", term.Dim, term.Reset)
+			return nil
+		}
+	}
+
+	for _, p := range stored {
+		if err := keyringRemove(p); err != nil {
+			fmt.Printf("  %s\u2717%s %s: %v\n", term.Red, term.Reset, p, err)
+			continue
+		}
+		fmt.Printf("  %s\u2713%s %s removed\n", term.Green, term.Reset, p)
 	}
 	return nil
 }
