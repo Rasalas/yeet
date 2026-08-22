@@ -64,11 +64,12 @@ Pressing Escape cancels safely — if yeet auto-staged, it unstages. If you stag
 | `yeet prompt` | Edit the AI system prompt in `$EDITOR` |
 | `yeet prompt show` | Print the current prompt |
 | `yeet prompt reset` | Reset prompt to default |
+| `yeet pr` | Create a GitHub/GitLab PR with AI-generated title and body |
+| `yeet log <path>...` | AI work recap across repos (`--since`, `--until`, `--author`, `--export`) |
 | `yeet eval plan` | Estimate eval sample + cost (no API calls) |
 | `yeet eval generate` | Generate bounded A/B candidates from historical runs |
 | `yeet eval judge` | Blind-judge A/B candidates (`A/B/tie/both bad`) |
 | `yeet eval report` | Show win-rate, cost, latency, and phrase-hit stats |
-| `yeet log` | Pretty `git log --oneline --graph` |
 
 ## Setup
 
