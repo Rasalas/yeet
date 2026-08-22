@@ -5,7 +5,7 @@ Git commit & push in one command. With AI-generated commit messages.
 
 ![alt text](docs/assets/screenshot-yeet.png)
 
-Commit messages stream in token-by-token with a spinner. Diff stats, messages, and costs are color-coded. Set `NO_COLOR=1` to disable colors.
+Commit messages stream in token-by-token with a spinner. Diff stats, messages, and costs are color-coded. Set `NO_COLOR=1` to disable colors. Colors turn off automatically when stdout is not a terminal (piping); set `FORCE_COLOR=1` to keep them.
 
 ## Install
 

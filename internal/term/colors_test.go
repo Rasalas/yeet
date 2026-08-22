@@ -80,3 +80,21 @@ func TestColorizeDiffStatNoColor(t *testing.T) {
 		t.Errorf("NO_COLOR output contains escape codes: %q", got)
 	}
 }
+
+func TestColorDisabled(t *testing.T) {
+	t.Run("NO_COLOR always wins", func(t *testing.T) {
+		t.Setenv("NO_COLOR", "1")
+		t.Setenv("FORCE_COLOR", "1")
+		if !colorDisabled() {
+			t.Error("colorDisabled() = false with NO_COLOR set, want true")
+		}
+	})
+
+	t.Run("FORCE_COLOR keeps colors when piped", func(t *testing.T) {
+		t.Setenv("NO_COLOR", "")
+		t.Setenv("FORCE_COLOR", "1")
+		if colorDisabled() {
+			t.Error("colorDisabled() = true with FORCE_COLOR set and non-TTY stdout, want false")
+		}
+	})
+}
