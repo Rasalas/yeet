@@ -43,6 +43,7 @@ type entry struct {
 	label           string
 	model           string
 	reasoningEffort string
+	upstream        string
 	key             keyring.KeyInfo
 }
 
@@ -68,6 +69,12 @@ type model struct {
 	reasoningPicking bool
 	reasoningChoices []string
 	reasoningCursor  int
+
+	// Pi upstream picker state
+	upstreamPicking bool
+	upstreamChoices []string
+	upstreamCursor  int
+	upstreamLoading bool
 }
 
 // modelsLoadedMsg is sent when the async model fetch completes.
@@ -76,13 +83,18 @@ type modelsLoadedMsg struct {
 	err    error
 }
 
+type piUpstreamsLoadedMsg struct {
+	upstreams []string
+	err       error
+}
+
 var labels = map[string]string{
 	"auto":       "Auto (native first, then cheapest API)",
 	"anthropic":  "Anthropic",
 	"openai":     "OpenAI",
 	"ollama":     "Ollama (local)",
 	"codex":      "Codex CLI (ACP)",
-	"pi":         "Pi (OpenAI Codex)",
+	"pi":         "Pi",
 	"claude":     "Claude Code (ACP)",
 	"google":     "Google Gemini",
 	"groq":       "Groq",
@@ -109,6 +121,7 @@ func initialModel() model {
 		} else {
 			e.model = providerModel(cfg, p)
 			e.reasoningEffort = providerReasoningEffort(cfg, p)
+			e.upstream = providerUpstream(cfg, p)
 			e.key = keyStatus[p]
 		}
 		entries = append(entries, e)
@@ -139,6 +152,13 @@ func providerReasoningEffort(cfg config.Config, p string) string {
 	return ""
 }
 
+func providerUpstream(cfg config.Config, p string) string {
+	if rp, ok := cfg.ResolveProviderFull(p); ok {
+		return rp.Upstream
+	}
+	return ""
+}
+
 func (m model) Init() tea.Cmd { return nil }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -152,12 +172,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case modelsLoadedMsg:
 		return m.handleModelsLoaded(msg)
+	case piUpstreamsLoadedMsg:
+		return m.handlePiUpstreamsLoaded(msg)
 	case tea.KeyMsg:
 		if m.picking {
 			return m.updatePicking(msg)
 		}
 		if m.reasoningPicking {
 			return m.updateReasoningPicking(msg)
+		}
+		if m.upstreamPicking {
+			return m.updateUpstreamPicking(msg)
 		}
 		switch msg.String() {
 		case "q", "ctrl+c", "esc":
@@ -220,6 +245,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 			m.message = ""
+		case "u":
+			e := m.entries[m.cursor]
+			if !providerUsesPi(m.cfg, e.name) {
+				break
+			}
+			m.upstreamPicking = true
+			m.upstreamLoading = true
+			m.upstreamChoices = nil
+			m.upstreamCursor = 0
+			m.message = ""
+			return m, m.fetchPiUpstreamsCmd(e.name)
 		case "r":
 			e := m.entries[m.cursor]
 			if providerUsesNativeConfig(m.cfg, e.name) {
@@ -259,7 +295,7 @@ func (m *model) handleModelsLoaded(msg modelsLoadedMsg) (tea.Model, tea.Cmd) {
 	m.pickLoading = false
 	if msg.err != nil || len(msg.models) == 0 {
 		// Fallback to static KnownModels
-		m.pickModels = config.KnownModels[m.pickProvider]
+		m.pickModels = fallbackModels(m.cfg, m.pickProvider)
 	} else {
 		m.pickModels = msg.models
 	}
@@ -268,6 +304,51 @@ func (m *model) handleModelsLoaded(msg modelsLoadedMsg) (tea.Model, tea.Cmd) {
 	}
 	m.applyFilter()
 	return m, nil
+}
+
+func fallbackModels(cfg config.Config, provider string) []string {
+	rp, ok := cfg.ResolveProviderFull(provider)
+	if ok && rp.Protocol == config.ProtocolPi {
+		return append([]string(nil), config.KnownPiModels[rp.Upstream]...)
+	}
+	return append([]string(nil), config.KnownModels[provider]...)
+}
+
+func (m *model) fetchPiUpstreamsCmd(provider string) tea.Cmd {
+	cfg := m.cfg
+	return func() tea.Msg {
+		upstreams, err := ai.FetchPiUpstreams(context.Background(), provider, cfg)
+		return piUpstreamsLoadedMsg{upstreams: upstreams, err: err}
+	}
+}
+
+func (m *model) handlePiUpstreamsLoaded(msg piUpstreamsLoadedMsg) (tea.Model, tea.Cmd) {
+	m.upstreamLoading = false
+	current := m.entries[m.cursor].upstream
+	if msg.err != nil || len(msg.upstreams) == 0 {
+		m.upstreamChoices = append([]string(nil), config.KnownPiUpstreams...)
+	} else {
+		m.upstreamChoices = msg.upstreams
+	}
+	if current != "" && !containsString(m.upstreamChoices, current) {
+		m.upstreamChoices = append([]string{current}, m.upstreamChoices...)
+	}
+	for i, choice := range m.upstreamChoices {
+		if choice == current {
+			m.upstreamCursor = i
+			break
+		}
+	}
+	return m, nil
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }
 
 func prependNativeModelChoice(models []string) []string {
@@ -440,6 +521,46 @@ func (m *model) updateReasoningPicking(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m *model) updateUpstreamPicking(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.upstreamLoading {
+		if msg.String() == "esc" || msg.String() == "ctrl+c" {
+			m.upstreamPicking = false
+			m.upstreamLoading = false
+		}
+		return m, nil
+	}
+
+	switch msg.String() {
+	case "esc", "ctrl+c":
+		m.upstreamPicking = false
+		m.upstreamChoices = nil
+	case "up", "k":
+		if m.upstreamCursor > 0 {
+			m.upstreamCursor--
+		}
+	case "down", "j":
+		if m.upstreamCursor < len(m.upstreamChoices)-1 {
+			m.upstreamCursor++
+		}
+	case "enter":
+		if len(m.upstreamChoices) == 0 || m.upstreamCursor >= len(m.upstreamChoices) {
+			return m, nil
+		}
+		chosen := m.upstreamChoices[m.upstreamCursor]
+		m.upstreamPicking = false
+		e := &m.entries[m.cursor]
+		if err := m.saveUpstream(e.name, chosen); err != nil {
+			m.message = styleDanger.Render(fmt.Sprintf("  ✗ Failed to save config: %v", err))
+		} else {
+			e.upstream = chosen
+			e.model = ""
+			m.message = styleSuccess.Render(fmt.Sprintf("  ✓ Pi provider set to %s; model reset to native", chosen))
+		}
+		m.upstreamChoices = nil
+	}
+	return m, nil
+}
+
 func (m *model) saveModel(provider, newModel string) error {
 	m.cfg.SetModel(provider, newModel)
 	return config.Save(m.cfg)
@@ -447,6 +568,12 @@ func (m *model) saveModel(provider, newModel string) error {
 
 func (m *model) saveReasoningEffort(provider, effort string) error {
 	m.cfg.SetReasoningEffort(provider, effort)
+	return config.Save(m.cfg)
+}
+
+func (m *model) saveUpstream(provider, upstream string) error {
+	m.cfg.SetUpstream(provider, upstream)
+	m.cfg.SetModel(provider, "")
 	return config.Save(m.cfg)
 }
 
@@ -461,6 +588,9 @@ func (m model) View() string {
 	}
 	if m.reasoningPicking {
 		return m.viewReasoningPicker()
+	}
+	if m.upstreamPicking {
+		return m.viewUpstreamPicker()
 	}
 
 	var b strings.Builder
@@ -495,6 +625,9 @@ func (m model) View() string {
 	help := helpEntry("↑/↓", "navigate") + styleHelp.Render("  ·  ") +
 		helpEntry("enter", "select") + styleHelp.Render("  ·  ") +
 		helpEntry("m", "model")
+	if providerUsesPi(m.cfg, m.entries[m.cursor].name) {
+		help += styleHelp.Render("  ·  ") + helpEntry("u", "Pi provider")
+	}
 	if providerSupportsReasoningEffort(m.cfg, m.entries[m.cursor].name) {
 		help += styleHelp.Render("  ·  ") + helpEntry("t", "thinking")
 	}
@@ -578,6 +711,10 @@ func (m model) viewProviderEntry(i int, e entry, active string) string {
 			b.WriteString("\n")
 		}
 	}
+	if providerUsesPi(m.cfg, e.name) {
+		b.WriteString(styleHelp.Render("    provider: " + e.upstream))
+		b.WriteString("\n")
+	}
 	if e.name != "auto" && providerSupportsReasoningEffort(m.cfg, e.name) {
 		effort := e.reasoningEffort
 		def := config.DefaultReasoningEffort(e.name)
@@ -653,6 +790,11 @@ func providerNeedsAuth(cfg config.Config, provider string) bool {
 func providerUsesNativeConfig(cfg config.Config, provider string) bool {
 	rp, ok := cfg.ResolveProviderFull(provider)
 	return ok && (rp.Protocol == config.ProtocolACP || rp.Protocol == config.ProtocolPi)
+}
+
+func providerUsesPi(cfg config.Config, provider string) bool {
+	rp, ok := cfg.ResolveProviderFull(provider)
+	return ok && rp.Protocol == config.ProtocolPi
 }
 
 func providerSupportsReasoningEffort(cfg config.Config, provider string) bool {
@@ -807,6 +949,60 @@ func (m model) viewReasoningPicker() string {
 	b.WriteString("  " + help)
 	b.WriteString("\n")
 
+	return b.String()
+}
+
+func (m model) viewUpstreamPicker() string {
+	var b strings.Builder
+	e := m.entries[m.cursor]
+
+	b.WriteString("\n")
+	b.WriteString(styleTitle.Render(fmt.Sprintf("  Select Pi provider for %s", e.label)))
+	b.WriteString("\n\n")
+
+	if m.upstreamLoading {
+		b.WriteString(styleHelp.Render("  Fetching Pi providers..."))
+		b.WriteString("\n\n")
+		b.WriteString("  " + helpEntry("esc", "cancel"))
+		b.WriteString("\n")
+		return b.String()
+	}
+
+	maxVisible := max(m.height-7, 5)
+	start := 0
+	if len(m.upstreamChoices) > maxVisible {
+		start = m.upstreamCursor - maxVisible/2
+		start = max(start, 0)
+		start = min(start, len(m.upstreamChoices)-maxVisible)
+	}
+	end := min(start+maxVisible, len(m.upstreamChoices))
+	if start > 0 {
+		b.WriteString(styleHelp.Render(fmt.Sprintf("    ↑ %d more", start)))
+		b.WriteString("\n")
+	}
+	for i := start; i < end; i++ {
+		choice := m.upstreamChoices[i]
+		if i == m.upstreamCursor {
+			b.WriteString(styleSelected.Render("  › " + choice))
+		} else {
+			b.WriteString(styleBullet.Render("  · ") + styleNormal.Render(choice))
+		}
+		if choice == e.upstream {
+			b.WriteString(styleLabel.Render("  ← current"))
+		}
+		b.WriteString("\n")
+	}
+	if end < len(m.upstreamChoices) {
+		b.WriteString(styleHelp.Render(fmt.Sprintf("    ↓ %d more", len(m.upstreamChoices)-end)))
+		b.WriteString("\n")
+	}
+
+	b.WriteString("\n")
+	help := helpEntry("↑/↓", "navigate") + styleHelp.Render("  ·  ") +
+		helpEntry("enter", "select") + styleHelp.Render("  ·  ") +
+		helpEntry("esc", "back")
+	b.WriteString("  " + help)
+	b.WriteString("\n")
 	return b.String()
 }
 

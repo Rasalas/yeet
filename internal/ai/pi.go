@@ -22,6 +22,7 @@ type PiProvider struct {
 	Name            string
 	Command         string
 	Args            []string
+	Upstream        string
 	Model           string
 	ReasoningEffort string
 }
@@ -168,10 +169,8 @@ func (p *PiProvider) commandArgs(systemPrompt string) []string {
 }
 
 func (p *PiProvider) displayArgs() []string {
-	args := append([]string(nil), p.Args...)
-	if !hasCLIFlag(args, "--provider") {
-		args = append(args, "--provider", "openai-codex")
-	}
+	args := withoutCLIFlagValue(p.Args, "--provider")
+	args = append(args, "--provider", p.upstream())
 	if p.Model != "" && !hasCLIFlag(args, "--model") {
 		args = append(args, "--model", p.Model)
 	}
@@ -183,6 +182,34 @@ func (p *PiProvider) displayArgs() []string {
 		args = append(args, "--thinking", effort)
 	}
 	return args
+}
+
+func (p *PiProvider) upstream() string {
+	if upstream := strings.TrimSpace(p.Upstream); upstream != "" {
+		return upstream
+	}
+	if upstream := config.DefaultUpstream(p.Name); upstream != "" {
+		return upstream
+	}
+	return "openai-codex"
+}
+
+func withoutCLIFlagValue(args []string, flag string) []string {
+	out := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == flag {
+			if i+1 < len(args) {
+				i++
+			}
+			continue
+		}
+		if strings.HasPrefix(arg, flag+"=") {
+			continue
+		}
+		out = append(out, arg)
+	}
+	return out
 }
 
 func hasCLIFlag(args []string, flag string) bool {
@@ -203,6 +230,7 @@ func (p *PiProvider) usageModel(actual string) string {
 	if name == "" {
 		name = "pi"
 	}
+	name += "/" + p.upstream()
 	if model == "" {
 		return name + " (native config)"
 	}
@@ -221,35 +249,78 @@ func piCommandLine(command string, args []string) string {
 }
 
 func fetchPiModels(ctx context.Context, rp config.ResolvedProvider) ([]string, error) {
+	upstream := rp.Upstream
+	if upstream == "" {
+		upstream = config.DefaultUpstream(rp.Name)
+	}
+	catalog, err := fetchPiCatalog(ctx, rp, upstream)
+	if err != nil {
+		return nil, err
+	}
+	models := catalog.Models[upstream]
+	if len(models) == 0 {
+		return nil, fmt.Errorf("Pi did not list any models for %s", upstream)
+	}
+	return models, nil
+}
+
+// FetchPiUpstreams returns the providers advertised by the configured Pi
+// installation. Pi only lists providers for which it can resolve credentials.
+func FetchPiUpstreams(ctx context.Context, provider string, cfg config.Config) ([]string, error) {
+	rp, ok := cfg.ResolveProviderFull(provider)
+	if !ok || rp.Protocol != config.ProtocolPi {
+		return nil, fmt.Errorf("%s is not a Pi provider", provider)
+	}
+	catalog, err := fetchPiCatalog(ctx, rp, "")
+	if err != nil {
+		return nil, err
+	}
+	if len(catalog.Upstreams) == 0 {
+		return nil, fmt.Errorf("Pi did not list any configured providers")
+	}
+	return catalog.Upstreams, nil
+}
+
+type piCatalog struct {
+	Upstreams []string
+	Models    map[string][]string
+}
+
+func fetchPiCatalog(ctx context.Context, rp config.ResolvedProvider, search string) (piCatalog, error) {
 	if rp.Command == "" {
-		return nil, fmt.Errorf("%s command is not configured", rp.Name)
+		return piCatalog{}, fmt.Errorf("%s command is not configured", rp.Name)
 	}
 	runCtx, cancel := context.WithTimeout(ctx, modelDiscoveryTimeout)
 	defer cancel()
 
 	args := append([]string(nil), rp.Args...)
-	args = append(args, "--list-models", "openai-codex")
+	args = append(args, "--list-models")
+	if search != "" {
+		args = append(args, search)
+	}
 	cmd := exec.CommandContext(runCtx, rp.Command, args...)
 	output, err := cmd.Output()
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
-			return nil, fmt.Errorf("failed to list Pi models: %s", strings.TrimSpace(string(exitErr.Stderr)))
+			return piCatalog{}, fmt.Errorf("failed to list Pi models: %s", strings.TrimSpace(string(exitErr.Stderr)))
 		}
-		return nil, fmt.Errorf("failed to list Pi models: %w", err)
+		return piCatalog{}, fmt.Errorf("failed to list Pi models: %w", err)
 	}
+	return parsePiCatalog(output), nil
+}
 
-	var models []string
+func parsePiCatalog(output []byte) piCatalog {
+	catalog := piCatalog{Models: make(map[string][]string)}
 	for _, line := range strings.Split(string(output), "\n") {
 		fields := strings.Fields(line)
-		if len(fields) < 2 || fields[0] != "openai-codex" {
+		if len(fields) < 2 || fields[0] == "provider" {
 			continue
 		}
-		models = appendUnique(models, fields[1])
+		upstream, model := fields[0], fields[1]
+		catalog.Upstreams = appendUnique(catalog.Upstreams, upstream)
+		catalog.Models[upstream] = appendUnique(catalog.Models[upstream], model)
 	}
-	if len(models) == 0 {
-		return nil, fmt.Errorf("Pi did not list any openai-codex models")
-	}
-	return models, nil
+	return catalog
 }
 
 func CheckPiProvider(rp config.ResolvedProvider) error {

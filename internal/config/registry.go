@@ -15,6 +15,7 @@ const (
 type ProviderEntry struct {
 	DefaultModel           string
 	DefaultReasoningEffort string
+	DefaultUpstream        string
 	DefaultURL             string
 	DefaultEnv             string
 	DefaultCommand         string
@@ -58,6 +59,7 @@ var Registry = map[string]ProviderEntry{
 	"pi": {
 		DefaultModel:           "",
 		DefaultReasoningEffort: "low",
+		DefaultUpstream:        "openai-codex",
 		DefaultCommand:         "pi",
 		Protocol:               ProtocolPi,
 		NeedsAuth:              false,
@@ -104,6 +106,7 @@ type ResolvedProvider struct {
 	Name            string
 	Model           string
 	ReasoningEffort string
+	Upstream        string
 	URL             string
 	Env             string
 	Command         string

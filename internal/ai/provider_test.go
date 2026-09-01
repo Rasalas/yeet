@@ -118,6 +118,25 @@ func TestProviderCommandLineUsesACPConfigForCurrentCodexAdapter(t *testing.T) {
 	}
 }
 
+func TestProviderCommandLineUsesConfiguredPiUpstream(t *testing.T) {
+	rp := config.ResolvedProvider{
+		Name:            "pi",
+		Model:           "claude-test",
+		ReasoningEffort: "medium",
+		Upstream:        "anthropic",
+		Command:         "pi",
+		Args:            []string{"--provider", "openai-codex"},
+		Protocol:        config.ProtocolPi,
+	}
+	got := ProviderCommandLine(rp)
+	if strings.Count(got, "--provider") != 1 || !strings.Contains(got, "--provider anthropic") {
+		t.Fatalf("ProviderCommandLine() = %q", got)
+	}
+	if !strings.Contains(got, "--model claude-test") || !strings.Contains(got, "--thinking medium") {
+		t.Fatalf("ProviderCommandLine() = %q", got)
+	}
+}
+
 func TestUsesDefaultACPPackageAllowsPinnedPackage(t *testing.T) {
 	if !usesDefaultACPPackage([]string{"-y", "@agentclientprotocol/claude-agent-acp@0.32.0"}, "claude") {
 		t.Fatal("expected pinned Claude ACP package to count as default package")

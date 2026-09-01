@@ -17,6 +17,7 @@ import (
 type ProviderConfig struct {
 	Model           string   `toml:"model,omitempty"`
 	ReasoningEffort string   `toml:"reasoning_effort,omitempty"`
+	Upstream        string   `toml:"upstream,omitempty"`
 	URL             string   `toml:"url,omitempty"`
 	Env             string   `toml:"env,omitempty"`
 	Protocol        Protocol `toml:"protocol,omitempty"`
@@ -51,7 +52,6 @@ var KnownModels = map[string][]string{
 	"openai":     {"gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5", "gpt-5.5-pro", "gpt-5.4", "gpt-5.4-pro", "gpt-5.4-mini", "gpt-5.4-nano", "gpt-5.3-codex", "gpt-5.2", "gpt-4.1-mini"},
 	"ollama":     {"llama3", "llama3.1", "gemma2", "mistral", "codellama", "qwen2.5-coder"},
 	"codex":      {"gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5", "gpt-5.4-mini", "gpt-5.4", "gpt-5.3-codex", "gpt-5.3-codex-spark", "gpt-5.2"},
-	"pi":         {"gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5", "gpt-5.4-mini", "gpt-5.4", "gpt-5.3-codex-spark"},
 	"claude":     {"default", "fable", "opus", "sonnet", "haiku", "claude-fable-5", "claude-opus-4-8", "claude-sonnet-5", "claude-haiku-4-5-20251001"},
 	"google":     {"gemini-3-flash-preview", "gemini-2.5-flash"},
 	"groq":       {"llama-3.3-70b-versatile", "llama-3.1-8b-instant", "openai/gpt-oss-20b"},
@@ -59,9 +59,25 @@ var KnownModels = map[string][]string{
 	"mistral":    {"mistral-small-latest", "mistral-large-latest", "codestral-latest"},
 }
 
+// KnownPiUpstreams is the offline fallback for Pi's dynamic provider list.
+// A working Pi installation advertises its configured providers at runtime.
+var KnownPiUpstreams = []string{
+	"openai-codex",
+	"anthropic",
+	"github-copilot",
+	"google-gemini-cli",
+	"google-antigravity",
+}
+
+// KnownPiModels provides model-picker fallbacks when Pi model discovery fails.
+var KnownPiModels = map[string][]string{
+	"openai-codex": {"gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5", "gpt-5.4-mini", "gpt-5.4", "gpt-5.3-codex-spark"},
+	"anthropic":    {"claude-fable-5", "claude-opus-4-8", "claude-sonnet-5", "claude-haiku-4-5-20251001"},
+}
+
 var knownReasoningEfforts = map[string][]string{
 	"codex": {"low", "medium", "high", "xhigh"},
-	"pi":    {"low", "medium", "high", "xhigh"},
+	"pi":    {"off", "minimal", "low", "medium", "high", "xhigh", "max"},
 }
 
 func ReasoningEffortChoices(provider string) []string {
@@ -84,6 +100,13 @@ func LowestReasoningEffort(provider string) string {
 func DefaultReasoningEffort(provider string) string {
 	if entry, ok := Registry[provider]; ok {
 		return entry.DefaultReasoningEffort
+	}
+	return ""
+}
+
+func DefaultUpstream(provider string) string {
+	if entry, ok := Registry[provider]; ok {
+		return entry.DefaultUpstream
 	}
 	return ""
 }
@@ -256,6 +279,7 @@ func (c Config) ResolveProviderFull(name string) (ResolvedProvider, bool) {
 		Name:            name,
 		Model:           entry.DefaultModel,
 		ReasoningEffort: entry.DefaultReasoningEffort,
+		Upstream:        entry.DefaultUpstream,
 		URL:             entry.DefaultURL,
 		Env:             entry.DefaultEnv,
 		Command:         entry.DefaultCommand,
@@ -314,6 +338,9 @@ func (c Config) ResolveProviderFull(name string) (ResolvedProvider, bool) {
 		}
 		if custom.ReasoningEffort != "" {
 			rp.ReasoningEffort = custom.ReasoningEffort
+		}
+		if custom.Upstream != "" {
+			rp.Upstream = custom.Upstream
 		}
 		if custom.URL != "" {
 			rp.URL = custom.URL
@@ -391,6 +418,25 @@ func (c *Config) SetModel(provider, model string) {
 	}
 }
 
+// SetUpstream writes the provider selected inside a CLI-backed provider such
+// as Pi. The registry default is stored as empty so it can update centrally.
+func (c *Config) SetUpstream(provider, upstream string) {
+	if upstream == DefaultUpstream(provider) {
+		upstream = ""
+	}
+
+	pc, exists := c.Custom[provider]
+	if upstream == "" && !exists {
+		return
+	}
+	if c.Custom == nil {
+		c.Custom = make(map[string]ProviderConfig)
+	}
+	pc.Upstream = upstream
+	applyRegistryDefaults(provider, &pc)
+	c.Custom[provider] = pc
+}
+
 // SetReasoningEffort writes a reasoning effort override. The provider default is stored as empty.
 func (c *Config) SetReasoningEffort(provider, effort string) {
 	if effort == DefaultReasoningEffort(provider) {
@@ -454,6 +500,9 @@ func (c Config) Validate() []string {
 		case ProtocolACP, ProtocolPi:
 			if pc.Command == "" {
 				problems = append(problems, fmt.Sprintf("custom CLI provider %q is missing command", name))
+			}
+			if proto == ProtocolPi && pc.Upstream == "" {
+				problems = append(problems, fmt.Sprintf("custom Pi provider %q is missing upstream", name))
 			}
 		case ProtocolOllama:
 			if pc.URL == "" {

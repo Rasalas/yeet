@@ -230,6 +230,36 @@ func TestProviderReasoningEffort(t *testing.T) {
 	}
 }
 
+func TestProviderUpstream(t *testing.T) {
+	cfg := config.DefaultConfig()
+	if got := providerUpstream(cfg, "pi"); got != "openai-codex" {
+		t.Fatalf("providerUpstream(pi) = %q", got)
+	}
+	cfg.SetUpstream("pi", "anthropic")
+	if got := providerUpstream(cfg, "pi"); got != "anthropic" {
+		t.Fatalf("providerUpstream(pi) = %q after update", got)
+	}
+	if got := fallbackModels(cfg, "pi"); len(got) == 0 || got[0] != "claude-fable-5" {
+		t.Fatalf("Pi Anthropic fallback models = %v", got)
+	}
+}
+
+func TestPiUpstreamFallbackKeepsCurrentCustomProvider(t *testing.T) {
+	m := model{
+		entries: []entry{{name: "pi", upstream: "company-proxy"}},
+		cursor:  0,
+	}
+
+	_, _ = m.handlePiUpstreamsLoaded(piUpstreamsLoadedMsg{err: fmt.Errorf("Pi unavailable")})
+
+	if len(m.upstreamChoices) == 0 || m.upstreamChoices[0] != "company-proxy" {
+		t.Fatalf("upstream choices = %v, want current custom provider first", m.upstreamChoices)
+	}
+	if m.upstreamCursor != 0 {
+		t.Fatalf("upstream cursor = %d, want 0", m.upstreamCursor)
+	}
+}
+
 func TestProviderSupportsReasoningEffort(t *testing.T) {
 	cfg := config.DefaultConfig()
 	if !providerSupportsReasoningEffort(cfg, "codex") {

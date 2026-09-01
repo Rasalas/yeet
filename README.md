@@ -88,7 +88,7 @@ Opens a TUI where you can select your AI provider, set models, and manage keys.
 | Anthropic | `claude-haiku-4-5-20251001` |
 | OpenAI | `gpt-4o-mini` |
 | Ollama (local) | `llama3` |
-| Pi with OpenAI Codex | native Pi config |
+| Pi | configured Pi provider/model |
 | Codex CLI via ACP | native Codex config |
 | Claude Code via ACP | native Claude config |
 
@@ -124,7 +124,7 @@ The default provider is `auto`. It tries local/native providers first, then fall
 
 Default order:
 
-1. `pi` with its OpenAI Codex provider, if the `pi` command is available
+1. `pi` with its configured upstream provider, if the `pi` command is available
 2. `codex` via ACP, if the adapter command is available
 3. `ollama`, if the configured Ollama server is reachable
 4. `claude` via ACP, if the adapter command is available
@@ -157,21 +157,26 @@ model = "llama3"
 url = "http://localhost:11434"
 ```
 
-### Pi with OpenAI Codex
+### Pi providers
 
-Pi can use a ChatGPT Plus or Pro login for its `openai-codex` provider. Install Pi, start it once, then use `/login` and select `ChatGPT Plus/Pro (Codex)`. After that, select `pi` in `yeet config` or set:
+Pi can route yeet requests through any provider available in the installed Pi client. This includes subscription-backed providers such as OpenAI Codex, Claude, GitHub Copilot, Gemini CLI, and Pi's configured API-key or custom providers.
+
+Install Pi, start it once, and use `/login` to configure the providers you want. Then select `pi` in `yeet config`. Press `u` on the Pi entry to choose one of the providers advertised by Pi, `m` to choose one of that provider's models, and `t` to set the thinking level.
+
+The default upstream is `openai-codex`. You can also configure it directly:
 
 ```toml
 provider = "pi"
 
 [custom.pi]
-model = "gpt-5.6-luna"  # optional; omit to use Pi's native config
+upstream = "anthropic"
+model = "claude-sonnet-5"  # optional; omit to use Pi's native model
 reasoning_effort = "low"
 ```
 
 yeet runs Pi in JSON print mode with `--no-session`, disables tools and local context discovery, and streams only the generated message. These one-shot calls create neither Pi session files nor Codex app-server threads, so they do not appear as short script-like tasks in the Codex app.
 
-Pi manages its own login in `~/.pi/agent/auth.json`; yeet does not copy or store those credentials. Run `pi` and use `/login` if `yeet doctor --ai` reports an authentication problem.
+Pi manages its own login in `~/.pi/agent/auth.json`; yeet does not copy or store those credentials. Direct yeet providers remain available for users who prefer yeet's keyring and plain HTTP calls. Run `pi` and use `/login` if `yeet doctor --ai` reports an authentication problem.
 
 ### Local ACP providers
 

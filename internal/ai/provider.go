@@ -40,7 +40,7 @@ func buildProvider(rp config.ResolvedProvider) (Provider, error) {
 		if rp.Command == "" {
 			return nil, fmt.Errorf("%s command is not configured", rp.Name)
 		}
-		return &PiProvider{Name: rp.Name, Command: rp.Command, Args: rp.Args, Model: rp.Model, ReasoningEffort: rp.ReasoningEffort}, nil
+		return &PiProvider{Name: rp.Name, Command: rp.Command, Args: rp.Args, Upstream: rp.Upstream, Model: rp.Model, ReasoningEffort: rp.ReasoningEffort}, nil
 	}
 
 	if rp.NeedsAuth {
@@ -388,7 +388,17 @@ func providerLabel(name, model string) string {
 }
 
 func autoDisplayModel(rp config.ResolvedProvider) string {
-	if rp.Protocol == config.ProtocolACP || rp.Protocol == config.ProtocolPi {
+	if rp.Protocol == config.ProtocolPi {
+		upstream := rp.Upstream
+		if upstream == "" {
+			upstream = "native provider"
+		}
+		if rp.Model != "" {
+			return rp.Name + " · " + upstream + " · " + rp.Model
+		}
+		return rp.Name + " · " + upstream + " (native model)"
+	}
+	if rp.Protocol == config.ProtocolACP {
 		if rp.Model != "" {
 			return rp.Name + " · " + rp.Model
 		}
@@ -438,7 +448,7 @@ func ProviderCommandLine(rp config.ResolvedProvider) string {
 		return acpCommandLine(rp.Command, (&ACPProvider{Name: rp.Name, Args: rp.Args, Model: rp.Model, ReasoningEffort: rp.ReasoningEffort}).commandArgs())
 	}
 	if rp.Protocol == config.ProtocolPi {
-		provider := &PiProvider{Name: rp.Name, Command: rp.Command, Args: rp.Args, Model: rp.Model, ReasoningEffort: rp.ReasoningEffort}
+		provider := &PiProvider{Name: rp.Name, Command: rp.Command, Args: rp.Args, Upstream: rp.Upstream, Model: rp.Model, ReasoningEffort: rp.ReasoningEffort}
 		return strings.Join(append([]string{rp.Command}, provider.displayArgs()...), " ")
 	}
 	return strings.TrimSpace(strings.Join(append([]string{rp.Command}, rp.Args...), " "))

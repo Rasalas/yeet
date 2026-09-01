@@ -31,6 +31,9 @@ func TestDefaultConfig(t *testing.T) {
 	if got := DefaultReasoningEffort("codex"); got != "low" {
 		t.Errorf("DefaultReasoningEffort(codex) = %q", got)
 	}
+	if got := DefaultUpstream("pi"); got != "openai-codex" {
+		t.Errorf("DefaultUpstream(pi) = %q", got)
+	}
 }
 
 func TestAutoOrder(t *testing.T) {
@@ -210,6 +213,18 @@ func TestResolveProviderFull(t *testing.T) {
 		if rp.Command != "pi" || rp.ReasoningEffort != "low" {
 			t.Fatalf("resolved Pi defaults = %#v", rp)
 		}
+		if rp.Upstream != "openai-codex" {
+			t.Fatalf("Pi upstream = %q", rp.Upstream)
+		}
+	})
+
+	t.Run("custom Pi upstream overrides default", func(t *testing.T) {
+		cfg := DefaultConfig()
+		cfg.Custom = map[string]ProviderConfig{"pi": {Upstream: "anthropic"}}
+		rp, ok := cfg.ResolveProviderFull("pi")
+		if !ok || rp.Upstream != "anthropic" {
+			t.Fatalf("resolved Pi provider = %#v, ok = %v", rp, ok)
+		}
 	})
 
 	t.Run("custom codex reasoning overrides default", func(t *testing.T) {
@@ -314,6 +329,27 @@ func TestSetReasoningEffort(t *testing.T) {
 	})
 }
 
+func TestSetUpstream(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.SetUpstream("pi", "anthropic")
+	if got := cfg.Custom["pi"].Upstream; got != "anthropic" {
+		t.Fatalf("Custom[pi].Upstream = %q", got)
+	}
+	rp, ok := cfg.ResolveProviderFull("pi")
+	if !ok || rp.Upstream != "anthropic" {
+		t.Fatalf("resolved Pi provider = %#v, ok = %v", rp, ok)
+	}
+
+	cfg.SetUpstream("pi", "openai-codex")
+	if got := cfg.Custom["pi"].Upstream; got != "" {
+		t.Fatalf("default upstream override = %q, want empty", got)
+	}
+	rp, _ = cfg.ResolveProviderFull("pi")
+	if rp.Upstream != "openai-codex" {
+		t.Fatalf("resolved default upstream = %q", rp.Upstream)
+	}
+}
+
 func TestValidate(t *testing.T) {
 	t.Run("valid config", func(t *testing.T) {
 		cfg := DefaultConfig()
@@ -398,6 +434,23 @@ func TestValidate(t *testing.T) {
 		}
 		if !found {
 			t.Errorf("expected missing command warning, got: %v", problems)
+		}
+	})
+
+	t.Run("custom Pi missing upstream", func(t *testing.T) {
+		cfg := DefaultConfig()
+		cfg.Custom = map[string]ProviderConfig{
+			"my-pi": {Protocol: ProtocolPi, Command: "pi"},
+		}
+		problems := cfg.Validate()
+		found := false
+		for _, p := range problems {
+			if strings.Contains(p, "missing upstream") {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("expected missing upstream warning, got: %v", problems)
 		}
 	})
 
