@@ -8,6 +8,7 @@ const (
 	ProtocolOpenAI    Protocol = "openai"
 	ProtocolOllama    Protocol = "ollama"
 	ProtocolACP       Protocol = "acp"
+	ProtocolPi        Protocol = "pi"
 )
 
 // ProviderEntry holds the static defaults for a known provider.
@@ -52,6 +53,13 @@ var Registry = map[string]ProviderEntry{
 		DefaultCommand:         "npx",
 		DefaultArgs:            []string{"-y", "@agentclientprotocol/codex-acp@1.1.2"},
 		Protocol:               ProtocolACP,
+		NeedsAuth:              false,
+	},
+	"pi": {
+		DefaultModel:           "",
+		DefaultReasoningEffort: "low",
+		DefaultCommand:         "pi",
+		Protocol:               ProtocolPi,
 		NeedsAuth:              false,
 	},
 	"claude": {

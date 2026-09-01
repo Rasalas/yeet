@@ -36,6 +36,12 @@ func buildProvider(rp config.ResolvedProvider) (Provider, error) {
 		}
 		return &ACPProvider{Name: rp.Name, Command: rp.Command, Args: rp.Args, Model: rp.Model, ReasoningEffort: rp.ReasoningEffort}, nil
 	}
+	if rp.Protocol == config.ProtocolPi {
+		if rp.Command == "" {
+			return nil, fmt.Errorf("%s command is not configured", rp.Name)
+		}
+		return &PiProvider{Name: rp.Name, Command: rp.Command, Args: rp.Args, Model: rp.Model, ReasoningEffort: rp.ReasoningEffort}, nil
+	}
 
 	if rp.NeedsAuth {
 		key, err := keyring.GetWithEnv(rp.Name, rp.Env)
@@ -107,13 +113,29 @@ func autoCandidates(cfg config.Config) []candidate {
 
 func autoCandidateForProvider(cfg config.Config, name string) (candidate, bool) {
 	rp, ok := cfg.ResolveProviderFull(name)
-	if !ok || rp.Model == "" && rp.Protocol != config.ProtocolACP {
+	if !ok || rp.Model == "" && rp.Protocol != config.ProtocolACP && rp.Protocol != config.ProtocolPi {
 		return candidate{}, false
 	}
 
 	switch rp.Protocol {
 	case config.ProtocolACP:
 		rp = resolveACPProvider(rp)
+		if rp.Command == "" {
+			return candidate{}, false
+		}
+		if _, err := exec.LookPath(rp.Command); err != nil {
+			return candidate{}, false
+		}
+		resolved := rp
+		return candidate{
+			name:  resolved.Name,
+			model: autoDisplayModel(resolved),
+			cost:  -1,
+			builder: func() (Provider, error) {
+				return buildProvider(resolved)
+			},
+		}, true
+	case config.ProtocolPi:
 		if rp.Command == "" {
 			return candidate{}, false
 		}
@@ -166,7 +188,7 @@ func autoAPICandidates(cfg config.Config) []candidate {
 			continue
 		}
 		// Skip local/agent providers for auto-select (no comparable cost info).
-		if rp.Protocol == config.ProtocolOllama || rp.Protocol == config.ProtocolACP {
+		if rp.Protocol == config.ProtocolOllama || rp.Protocol == config.ProtocolACP || rp.Protocol == config.ProtocolPi {
 			continue
 		}
 		if !rp.NeedsAuth {
@@ -366,7 +388,7 @@ func providerLabel(name, model string) string {
 }
 
 func autoDisplayModel(rp config.ResolvedProvider) string {
-	if rp.Protocol == config.ProtocolACP {
+	if rp.Protocol == config.ProtocolACP || rp.Protocol == config.ProtocolPi {
 		if rp.Model != "" {
 			return rp.Name + " · " + rp.Model
 		}
@@ -414,6 +436,10 @@ func ProviderCommandLine(rp config.ResolvedProvider) string {
 	if rp.Protocol == config.ProtocolACP {
 		rp = resolveACPProvider(rp)
 		return acpCommandLine(rp.Command, (&ACPProvider{Name: rp.Name, Args: rp.Args, Model: rp.Model, ReasoningEffort: rp.ReasoningEffort}).commandArgs())
+	}
+	if rp.Protocol == config.ProtocolPi {
+		provider := &PiProvider{Name: rp.Name, Command: rp.Command, Args: rp.Args, Model: rp.Model, ReasoningEffort: rp.ReasoningEffort}
+		return strings.Join(append([]string{rp.Command}, provider.displayArgs()...), " ")
 	}
 	return strings.TrimSpace(strings.Join(append([]string{rp.Command}, rp.Args...), " "))
 }

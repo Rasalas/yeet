@@ -88,6 +88,7 @@ Opens a TUI where you can select your AI provider, set models, and manage keys.
 | Anthropic | `claude-haiku-4-5-20251001` |
 | OpenAI | `gpt-4o-mini` |
 | Ollama (local) | `llama3` |
+| Pi with OpenAI Codex | native Pi config |
 | Codex CLI via ACP | native Codex config |
 | Claude Code via ACP | native Claude config |
 
@@ -108,7 +109,7 @@ yeet auth set anthropic
 
 Keys are stored in the OS keyring (macOS Keychain, Windows Credential Manager, Linux Secret Service). Environment variables (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, etc.) are used as fallback.
 
-Codex/Claude ACP providers use their own CLI login/config and are not managed through `yeet auth`.
+Pi and the Codex/Claude ACP providers use their own CLI login/config and are not managed through `yeet auth`.
 
 If you have keys in environment variables or OpenCode's `auth.json`, import them into the keyring:
 
@@ -123,16 +124,17 @@ The default provider is `auto`. It tries local/native providers first, then fall
 
 Default order:
 
-1. `codex` via ACP, if the adapter command is available
-2. `ollama`, if the configured Ollama server is reachable
-3. `claude` via ACP, if the adapter command is available
-4. API-key providers, sorted by input token cost
+1. `pi` with its OpenAI Codex provider, if the `pi` command is available
+2. `codex` via ACP, if the adapter command is available
+3. `ollama`, if the configured Ollama server is reachable
+4. `claude` via ACP, if the adapter command is available
+5. API-key providers, sorted by input token cost
 
-Codex/Claude subscription quota or remaining "volume" is not exposed through ACP, so yeet uses this fixed order instead of trying to guess it. Override it with:
+Native CLI subscription quota or remaining "volume" is not exposed to yeet, so it uses this fixed order instead of trying to guess it. Override it with:
 
 ```toml
 [auto]
-order = ["codex", "ollama", "claude", "api"]
+order = ["pi", "codex", "ollama", "claude", "api"]
 ```
 
 Use `api` as a placeholder for all available API-key providers sorted by input-token cost. If you omit `api`, yeet will not fall back to API-key providers.
@@ -155,7 +157,23 @@ model = "llama3"
 url = "http://localhost:11434"
 ```
 
-### Local agent providers (ACP)
+### Pi with OpenAI Codex
+
+Pi can use a ChatGPT Plus or Pro login for its `openai-codex` provider. Install Pi, start it once, then use `/login` and select `ChatGPT Plus/Pro (Codex)`. After that, select `pi` in `yeet config` or set:
+
+```toml
+provider = "pi"
+
+[custom.pi]
+model = "gpt-5.6-luna"  # optional; omit to use Pi's native config
+reasoning_effort = "low"
+```
+
+yeet runs Pi in JSON print mode with `--no-session`, disables tools and local context discovery, and streams only the generated message. These one-shot calls create neither Pi session files nor Codex app-server threads, so they do not appear as short script-like tasks in the Codex app.
+
+Pi manages its own login in `~/.pi/agent/auth.json`; yeet does not copy or store those credentials. Run `pi` and use `/login` if `yeet doctor --ai` reports an authentication problem.
+
+### Local ACP providers
 
 `codex` and `claude` use local Agent Client Protocol adapters instead of yeet-managed API keys:
 

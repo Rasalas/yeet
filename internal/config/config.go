@@ -43,7 +43,7 @@ type Config struct {
 	Pricing   map[string]PricingOverride `toml:"pricing"`
 }
 
-var DefaultAutoOrder = []string{"codex", "ollama", "claude", "api"}
+var DefaultAutoOrder = []string{"pi", "codex", "ollama", "claude", "api"}
 
 // KnownModels lists available models per provider for the TUI picker.
 var KnownModels = map[string][]string{
@@ -51,6 +51,7 @@ var KnownModels = map[string][]string{
 	"openai":     {"gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5", "gpt-5.5-pro", "gpt-5.4", "gpt-5.4-pro", "gpt-5.4-mini", "gpt-5.4-nano", "gpt-5.3-codex", "gpt-5.2", "gpt-4.1-mini"},
 	"ollama":     {"llama3", "llama3.1", "gemma2", "mistral", "codellama", "qwen2.5-coder"},
 	"codex":      {"gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5", "gpt-5.4-mini", "gpt-5.4", "gpt-5.3-codex", "gpt-5.3-codex-spark", "gpt-5.2"},
+	"pi":         {"gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5", "gpt-5.4-mini", "gpt-5.4", "gpt-5.3-codex-spark"},
 	"claude":     {"default", "fable", "opus", "sonnet", "haiku", "claude-fable-5", "claude-opus-4-8", "claude-sonnet-5", "claude-haiku-4-5-20251001"},
 	"google":     {"gemini-3-flash-preview", "gemini-2.5-flash"},
 	"groq":       {"llama-3.3-70b-versatile", "llama-3.1-8b-instant", "openai/gpt-oss-20b"},
@@ -60,6 +61,7 @@ var KnownModels = map[string][]string{
 
 var knownReasoningEfforts = map[string][]string{
 	"codex": {"low", "medium", "high", "xhigh"},
+	"pi":    {"low", "medium", "high", "xhigh"},
 }
 
 func ReasoningEffortChoices(provider string) []string {
@@ -338,9 +340,9 @@ func (c Config) ResolveProviderFull(name string) (ResolvedProvider, bool) {
 		if rp.Protocol == "" {
 			rp.Protocol = ProtocolOpenAI
 		}
-		rp.NeedsAuth = rp.Protocol != ProtocolACP && rp.Protocol != ProtocolOllama
+		rp.NeedsAuth = rp.Protocol != ProtocolACP && rp.Protocol != ProtocolOllama && rp.Protocol != ProtocolPi
 	}
-	if rp.Protocol == ProtocolACP || rp.Protocol == ProtocolOllama {
+	if rp.Protocol == ProtocolACP || rp.Protocol == ProtocolOllama || rp.Protocol == ProtocolPi {
 		rp.NeedsAuth = false
 	}
 
@@ -449,9 +451,9 @@ func (c Config) Validate() []string {
 			proto = ProtocolOpenAI
 		}
 		switch proto {
-		case ProtocolACP:
+		case ProtocolACP, ProtocolPi:
 			if pc.Command == "" {
-				problems = append(problems, fmt.Sprintf("custom ACP provider %q is missing command", name))
+				problems = append(problems, fmt.Sprintf("custom CLI provider %q is missing command", name))
 			}
 		case ProtocolOllama:
 			if pc.URL == "" {

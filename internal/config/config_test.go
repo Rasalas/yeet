@@ -25,7 +25,7 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.Ollama.URL != Registry["ollama"].DefaultURL {
 		t.Errorf("Ollama.URL = %q, want %q", cfg.Ollama.URL, Registry["ollama"].DefaultURL)
 	}
-	if got := strings.Join(cfg.AutoOrder(), ","); got != "codex,ollama,claude,api" {
+	if got := strings.Join(cfg.AutoOrder(), ","); got != "pi,codex,ollama,claude,api" {
 		t.Errorf("AutoOrder = %q", got)
 	}
 	if got := DefaultReasoningEffort("codex"); got != "low" {
@@ -50,6 +50,7 @@ func TestDefaultModel(t *testing.T) {
 		{"openai", "gpt-4o-mini"},
 		{"ollama", "llama3"},
 		{"codex", ""},
+		{"pi", ""},
 		{"claude", ""},
 		{"google", "gemini-3-flash-preview"},
 		{"groq", "llama-3.3-70b-versatile"},
@@ -194,6 +195,20 @@ func TestResolveProviderFull(t *testing.T) {
 		}
 		if rp.Command != "my-agent" || len(rp.Args) != 1 || rp.Args[0] != "--acp" {
 			t.Errorf("command = %q args = %v", rp.Command, rp.Args)
+		}
+	})
+
+	t.Run("pi is a native no-auth CLI", func(t *testing.T) {
+		cfg := DefaultConfig()
+		rp, ok := cfg.ResolveProviderFull("pi")
+		if !ok {
+			t.Fatal("returned false")
+		}
+		if rp.Protocol != ProtocolPi || rp.NeedsAuth {
+			t.Fatalf("resolved Pi provider = %#v", rp)
+		}
+		if rp.Command != "pi" || rp.ReasoningEffort != "low" {
+			t.Fatalf("resolved Pi defaults = %#v", rp)
 		}
 	})
 

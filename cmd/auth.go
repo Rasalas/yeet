@@ -264,5 +264,5 @@ func providerUsesYeetKey(cfg config.Config, provider string) bool {
 
 func providerUsesNativeCLIAuth(cfg config.Config, provider string) bool {
 	rp, ok := cfg.ResolveProviderFull(provider)
-	return ok && rp.Protocol == config.ProtocolACP
+	return ok && (rp.Protocol == config.ProtocolACP || rp.Protocol == config.ProtocolPi)
 }

@@ -82,6 +82,7 @@ var labels = map[string]string{
 	"openai":     "OpenAI",
 	"ollama":     "Ollama (local)",
 	"codex":      "Codex CLI (ACP)",
+	"pi":         "Pi (OpenAI Codex)",
 	"claude":     "Claude Code (ACP)",
 	"google":     "Google Gemini",
 	"groq":       "Groq",
@@ -651,7 +652,7 @@ func providerNeedsAuth(cfg config.Config, provider string) bool {
 
 func providerUsesNativeConfig(cfg config.Config, provider string) bool {
 	rp, ok := cfg.ResolveProviderFull(provider)
-	return ok && rp.Protocol == config.ProtocolACP
+	return ok && (rp.Protocol == config.ProtocolACP || rp.Protocol == config.ProtocolPi)
 }
 
 func providerSupportsReasoningEffort(cfg config.Config, provider string) bool {

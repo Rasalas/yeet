@@ -33,6 +33,8 @@ func FetchModels(ctx context.Context, provider string, cfg config.Config) ([]str
 		return fetchOllama(ctx, rp)
 	case config.ProtocolACP:
 		return fetchACPModels(ctx, rp)
+	case config.ProtocolPi:
+		return fetchPiModels(ctx, rp)
 	default:
 		return fetchOpenAICompatible(ctx, rp)
 	}

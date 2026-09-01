@@ -47,7 +47,7 @@ func runDoctor() error {
 		}
 	} else if rp, ok := cfg.ResolveProviderFull(provider); ok {
 		model = rp.Model
-		if rp.Protocol == config.ProtocolACP && model == "" {
+		if (rp.Protocol == config.ProtocolACP || rp.Protocol == config.ProtocolPi) && model == "" {
 			model = "(native CLI config)"
 		}
 	}
@@ -57,13 +57,13 @@ func runDoctor() error {
 	if provider == "auto" {
 		if autoProvider := ai.AutoProviderName(cfg); autoProvider != "" {
 			fmt.Printf("  %sAuto%s      %s\n", term.Bold, term.Reset, autoProvider)
-			if rp, ok := cfg.ResolveProviderFull(autoProvider); ok && rp.Protocol == config.ProtocolACP {
+			if rp, ok := cfg.ResolveProviderFull(autoProvider); ok && (rp.Protocol == config.ProtocolACP || rp.Protocol == config.ProtocolPi) {
 				fmt.Printf("  %sCommand%s   %s\n", term.Bold, term.Reset, ai.ProviderCommandLine(rp))
 			}
 		}
 	}
 	fmt.Printf("  %sModel%s     %s\n", term.Bold, term.Reset, model)
-	if rp, ok := cfg.ResolveProviderFull(provider); ok && rp.Protocol == config.ProtocolACP {
+	if rp, ok := cfg.ResolveProviderFull(provider); ok && (rp.Protocol == config.ProtocolACP || rp.Protocol == config.ProtocolPi) {
 		fmt.Printf("  %sCommand%s   %s\n", term.Bold, term.Reset, ai.ProviderCommandLine(rp))
 	}
 
@@ -104,7 +104,7 @@ func runDoctor() error {
 				}
 				fmt.Printf("  %s\u2717%s  %-16s%snot found  \u2190 %s%s\n", term.Red, term.Reset, p, term.Dim, hint, term.Reset)
 			}
-		} else if rp.Protocol == config.ProtocolACP {
+		} else if rp.Protocol == config.ProtocolACP || rp.Protocol == config.ProtocolPi {
 			fmt.Printf("  %s\u00b7%s  %-16s%suses native CLI auth%s\n", term.Dim, term.Reset, p, term.Dim, term.Reset)
 		} else {
 			fmt.Printf("  %s\u00b7%s  %-16s%sno auth needed%s\n", term.Dim, term.Reset, p, term.Dim, term.Reset)
@@ -173,6 +173,8 @@ func runDoctorAISmoke(cfg config.Config) (string, error) {
 	switch rp.Protocol {
 	case config.ProtocolACP:
 		return label, ai.CheckACPProvider(rp)
+	case config.ProtocolPi:
+		return label, ai.CheckPiProvider(rp)
 	default:
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
